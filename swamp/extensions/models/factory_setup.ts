@@ -5,9 +5,10 @@
  * everything fixable without privileges: it probes user-namespace and
  * overlayfs support with real kernel operations, bootstraps the isolated
  * build rootfs by running the actual packaging pipeline's installdeps stage
- * against the tracked seed package (test-packages/sl), creates working
- * directories, and installs the web app's node modules. Anything requiring
- * sudo or a login reports `missing` with the exact remediation command.
+ * against a generated seed package, creates working directories, and installs
+ * the web app's node modules. Long steps announce themselves through the
+ * logger so the run streams progress. Anything requiring sudo or a login
+ * reports `missing` with the exact remediation command.
  *
  * Safe to run repeatedly: a converged box reports all `ok` and changes
  * nothing. Target UX for a new box: install swamp, clone the repo,
@@ -152,13 +153,17 @@ export const model = {
         const add = (name: string, status: SetupCheck["status"], detail: string) =>
           checks.push({ name, status, detail });
 
+        const say = (msg: string) => context.logger.info(msg);
+
         // 1. Host commands (report-only; installing needs sudo or a login).
+        say("checking host commands...");
         for (const [cmd, fix] of HOST_COMMANDS) {
           const probe = await run(cmd, ["--version"]);
           add(`command-${cmd}`, probe.missing ? "missing" : "ok", probe.missing ? fix : "present");
         }
 
         // 2. Kernel capabilities, probed with the real operations.
+        say("probing user-namespace and overlayfs support...");
         const userns = await run("unshare", ["-r", "--map-auto", "true"]);
         add(
           "userns-map-auto",
@@ -201,6 +206,11 @@ export const model = {
         if (rootfsReady && !args.deep) {
           add("build-rootfs", "ok", `${cache}/rootfs (base-devel + namcap + shellcheck)`);
         } else if (userns.ok && ovl.ok && await exists(`${seedDir}/PKGBUILD`)) {
+          say(
+            rootfsReady
+              ? "verifying build rootfs via seed installdeps..."
+              : "bootstrapping the isolated build rootfs — downloads base-devel, can take several minutes on first run...",
+          );
           const seed = await run("swamp", [
             "model",
             "@omarchy/arch-package",
@@ -234,6 +244,7 @@ export const model = {
           if (await exists(`${appDir}/node_modules`)) {
             add("app-node-modules", "ok", appDir);
           } else if (!(await run("npm", ["--version"])).missing) {
+            say("installing web app dependencies (npm install) — can take a few minutes on first run...");
             const inst = await run("npm", ["install", "--silent"], appDir);
             logs.push(`$ npm install (exit ${inst.code})\n${inst.output.slice(-1500)}`);
             add("app-node-modules", inst.ok ? "fixed" : "missing", inst.ok ? "npm install completed" : "npm install failed — see setuplog");
@@ -241,6 +252,7 @@ export const model = {
             add("app-node-modules", "missing", "npm not installed (see command-npm)");
           }
           if (args.deep) {
+            say("deep: running the web app's test suite and production build...");
             const test = await run("npm", ["run", "test", "--silent"], appDir);
             const build = await run("npm", ["run", "build", "--silent"], appDir);
             logs.push(`$ npm test (exit ${test.code})\n${test.output.slice(-1000)}`);
@@ -253,6 +265,7 @@ export const model = {
 
         // 7. Deep: full isolated pipeline on the seed package — the strongest proof.
         if (args.deep) {
+          say("deep: building and vetting the seed package end-to-end...");
           const wf = await run("swamp", [
             "workflow",
             "run",
