@@ -67,7 +67,25 @@ Known-good starters, each proven through this factory:
 | htop | https://github.com/htop-dev/htop/archive/refs/tags/3.5.3.tar.gz | Interactive process viewer | GPL-2.0-only |
 | lazygit | https://github.com/jesseduffield/lazygit/archive/refs/tags/v0.64.1.tar.gz | Simple terminal UI for git commands | MIT |
 
-Full pipeline from the CLI (what the app's approve button runs):
+Hit the web interface, and then submit figlet:
+
+![figlet](./screenshots/figlet.png)
+
+Then go to the approval panel and approve it:
+
+![figlet-approve](./screenshots/figlet-approval.png)
+
+Give it a random username to approve it as.
+
+If there is a problem, the build will fail, and you will be able to look at all the 
+stages. Feed a hint for the next turn into the UI, and then retry the build with
+your hints!
+
+To "promote" the package, approve it as a maintainer and as a user:
+
+![approve](./screenshots/approve.png)
+
+Or run it from the CLI:
 
 ```
 swamp workflow run create-package \
