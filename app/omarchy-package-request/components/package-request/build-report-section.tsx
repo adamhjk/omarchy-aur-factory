@@ -3,14 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/markdown"
-import { cn } from "@/lib/utils"
 import type { BuildReport } from "@/lib/swamp"
 
 import { PhaseEvidenceRow, REPORT_PHASES, STAGE_LABEL } from "./phase-evidence"
@@ -136,17 +130,15 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
         <p className="text-sm text-muted-foreground">No build report available.</p>
       )}
 
-      {/* One disclosure, one name: "Build report" opens directly into the
-          rendered dossier. The durable-dossier path returns markdown with
-          json: null — render whenever markdown exists; badges only need json. */}
+      {/* The dossier renders directly — always loaded, no disclosure to hunt
+          for. The durable-dossier path returns markdown with json: null —
+          render whenever markdown exists; badges only need json. */}
       {!error && data?.source === "report" && data.markdown && (
-        <Collapsible>
+        <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <CollapsibleTrigger
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}
-            >
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               Build report
-            </CollapsibleTrigger>
+            </span>
             {data.json && (
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(data.json.stages).map(([name, stage]) =>
@@ -159,12 +151,10 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
               </div>
             )}
           </div>
-          <CollapsibleContent>
-            <div className="mt-2 max-h-96 overflow-auto rounded-md border p-3">
-              <Markdown>{data.markdown}</Markdown>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+          <div className="max-h-96 overflow-auto rounded-md border p-3">
+            <Markdown>{data.markdown}</Markdown>
+          </div>
+        </div>
       )}
 
       {!error && data?.source === "evidence" && data.evidence && (
