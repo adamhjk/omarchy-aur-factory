@@ -1,0 +1,8 @@
+type: '@omarchy/arch-package'
+typeVersion: 2026.09.03.1
+id: 00e46a87-2a13-4fbc-8581-b7d696330c86
+name: packager
+version: 1
+tags: {}
+globalArguments: {}
+methods: {}

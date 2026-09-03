@@ -1,0 +1,36 @@
+# Maintainer: Adam <adam@swamp-club.com>
+pkgname=shellharden
+pkgver=4.3.2
+pkgrel=1
+pkgdesc="Corrective bash syntax highlighter and shell script hardening tool"
+arch=(x86_64)
+url="https://github.com/anordal/shellharden"
+license=(MPL-2.0)
+depends=(gcc-libs glibc)
+makedepends=(cargo)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('3a6721c3409c70449c24a5b33f83d0d05026f2318fe052db5c6d0834e2b29c6c')
+
+prepare() {
+    cd "$srcdir/$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release --all-features
+}
+
+check() {
+    cd "$srcdir/$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --all-features
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+    install -Dm0755 -t "$pkgdir/usr/bin/" "target/release/$pkgname"
+}

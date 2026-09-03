@@ -1,0 +1,17 @@
+pkgbase = swamp
+	pkgdesc = Repository-native automation: models, workflows, and versioned data
+	pkgver = 20260903.173640.0_sha.5685207d
+	pkgrel = 1
+	url = https://github.com/swamp-club/swamp
+	arch = x86_64
+	license = AGPL-3.0-only
+	license = LicenseRef-Swamp-Extension-Exception
+	makedepends = deno
+	makedepends = nodejs
+	makedepends = npm
+	depends = glibc
+	options = !lto
+	source = swamp-20260903.173640.0_sha.5685207d.tar.gz::https://github.com/swamp-club/swamp/archive/refs/tags/v20260903.173640.0-sha.5685207d.tar.gz
+	sha256sums = 1242ad8589861826ae4eb3aaee6ffe1c183ac666da5649670425cd7202a436f3
+
+pkgname = swamp

@@ -1,0 +1,8 @@
+type: '@omarchy/app-factory'
+typeVersion: 2026.09.03.1
+id: c902f5c7-327b-4d0d-bf94-a75bb21865cf
+name: app-factory
+version: 1
+tags: {}
+globalArguments: {}
+methods: {}

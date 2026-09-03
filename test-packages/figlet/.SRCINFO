@@ -1,0 +1,12 @@
+pkgbase = figlet
+	pkgdesc = Program for making large letters out of ordinary text
+	pkgver = 2.2.5
+	pkgrel = 1
+	url = https://github.com/cmatsuoka/figlet
+	arch = x86_64
+	license = BSD-3-Clause
+	depends = glibc
+	source = figlet-2.2.5.tar.gz::https://github.com/cmatsuoka/figlet/archive/refs/tags/2.2.5.tar.gz
+	sha256sums = 4d366c4a618ecdd6fdb81cde90edc54dbff9764efb635b3be47a929473f13930
+
+pkgname = figlet

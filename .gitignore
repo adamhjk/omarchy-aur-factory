@@ -1,0 +1,13 @@
+# swamp runtime state (definitions/workflows ARE tracked; runtime data is not)
+swamp/.swamp/
+# build artifacts
+*.pkg.tar.zst
+*.pkg.tar.xz
+test-packages/*/src/
+test-packages/*/pkg/
+test-packages/*/*.log
+# app
+node_modules/
+.next/
+# skill eval workspace run outputs (definitions/graders are tracked)
+.claude/skills/arch-packaging-workspace/iteration-*/

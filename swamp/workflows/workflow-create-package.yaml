@@ -1,0 +1,122 @@
+id: c5684746-3cf6-48de-82a9-61f2ce193ec6
+name: create-package
+description: >-
+  Full packaging pipeline for a new package request: analyze sources
+  (deterministic fetch + build-system detection), author the PKGBUILD via a
+  constrained Claude call (small system prompt, read/write tools only,
+  structured DESIGN.json output), then checksums/build/lint/audit via the
+  build-package workflow. The build stage's evidence key derives from the
+  version the author stage recorded, so the whole chain of evidence — analysis,
+  design rationale, build log, lint, audit — is addressable per package release.
+tags:
+  factory: arch-packaging
+inputs:
+  type: object
+  properties:
+    pkgname:
+      type: string
+      description: Requested package name
+    url:
+      type: string
+      description: Source URL (https tarball/zip or git URL) from the packaging request
+    description:
+      type: string
+      description: Requested package description
+    license:
+      type: string
+      description: Requested license (SPDX) from the packaging request
+    dir:
+      type: string
+      description: Absolute path of the package directory to create (PKGBUILD lands here)
+    workdir:
+      type: string
+      description: Absolute scratch directory for source download/extraction
+    hints:
+      type: string
+      description: Optional maintainer hints for the authoring stage (retry-with-hints flow)
+      default: ""
+  required:
+    - pkgname
+    - url
+    - description
+    - license
+    - dir
+    - workdir
+jobs:
+  - name: design
+    description: Analyze sources and author the PKGBUILD
+    steps:
+      - name: analyze
+        description: Fetch and unpack sources, detect build system, locate licenses
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: analyze
+          inputs:
+            url: ${{ inputs.url }}
+            workdir: ${{ inputs.workdir }}
+            name: ${{ inputs.pkgname }}
+        dependsOn: []
+      - name: assert-analyze-passed
+        description: Fail if sources could not be fetched and unpacked
+        task:
+          type: assert
+          expr: data.latest("packager", "analysis-" + inputs.pkgname).attributes.passed == true
+          message: Source fetch/extraction failed — inspect analysis evidence and analyzelog
+          severity: high
+        dependsOn:
+          - step: analyze
+            condition:
+              type: succeeded
+      - name: author
+        description: Constrained Claude call writes the PKGBUILD and DESIGN.json
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: author
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.pkgname }}
+            pkgname: ${{ inputs.pkgname }}
+            url: ${{ inputs.url }}
+            description: ${{ inputs.description }}
+            license: ${{ inputs.license }}
+            analysisKey: ${{ inputs.pkgname }}
+            referencesDir: /home/adam/src/omarchy-aur-factory/.claude/skills/arch-packaging/references
+            hints: ${{ inputs.?hints.orValue("") }}
+        dependsOn:
+          - step: assert-analyze-passed
+            condition:
+              type: succeeded
+      - name: assert-author-passed
+        description: Fail if no parseable PKGBUILD + DESIGN.json were produced
+        task:
+          type: assert
+          expr: data.latest("packager", "author-" + inputs.pkgname).attributes.passed == true
+          message: PKGBUILD authoring failed — inspect author evidence, note-<pkgname>-pkgbuild, and authorlog
+          severity: high
+        dependsOn:
+          - step: author
+            condition:
+              type: succeeded
+  - name: pipeline
+    description: Checksums, build, lint, audit — keyed by the authored version
+    dependsOn:
+      - job: design
+        condition:
+          type: succeeded
+    steps:
+      - name: build-and-vet
+        description: Run the deterministic build pipeline against the authored PKGBUILD
+        task:
+          type: workflow
+          workflowIdOrName: build-package
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.pkgname }}
+            version: ${{ data.latest("packager", "author-" + inputs.pkgname).attributes.version }}
+        dependsOn: []
+reports:
+  require:
+    - "@omarchy/package-dossier"
+version: 1

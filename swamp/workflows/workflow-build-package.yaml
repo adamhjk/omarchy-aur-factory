@@ -1,0 +1,150 @@
+id: 973ac7c8-9589-4800-aa5c-fe57cc8f6f4f
+name: build-package
+description: >-
+  Deterministic build pipeline for an authored PKGBUILD: update checksums
+  (updpkgsums + .SRCINFO), build with makepkg (full log + PKGBUILD/.SRCINFO
+  snapshots as evidence), then run the vet-package workflow (lint + audit).
+  Every stage writes evidence keyed <stage>-<name>-<version>.
+tags:
+  factory: arch-packaging
+inputs:
+  type: object
+  properties:
+    dir:
+      type: string
+      description: Absolute path to the directory containing the PKGBUILD
+    name:
+      type: string
+      description: Package name (pkgname), e.g. sl
+    version:
+      type: string
+      description: Full package version <pkgver>-<pkgrel>, e.g. 5.02-1
+  required:
+    - dir
+    - name
+    - version
+jobs:
+  - name: build
+    description: Checksums, build, then vet
+    steps:
+      - name: checksums
+        description: updpkgsums + regenerate .SRCINFO
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: checksums
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn: []
+      - name: assert-checksums-passed
+        description: Fail if checksum update or .SRCINFO regeneration failed
+        task:
+          type: assert
+          expr: data.latest("packager", "checksums-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: updpkgsums or .SRCINFO regeneration failed — inspect checksums evidence and checksumslog
+          severity: high
+        dependsOn:
+          - step: checksums
+            condition:
+              type: succeeded
+      - name: installdeps
+        description: Install depends/makedepends into the package's isolated build root (bootstraps on first use)
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: installdeps
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-checksums-passed
+            condition:
+              type: succeeded
+      - name: assert-installdeps-passed
+        description: Fail if dependencies could not be installed into the build root
+        task:
+          type: assert
+          expr: data.latest("packager", "installdeps-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: Dependency installation failed — inspect installdeps evidence and installdepslog
+          severity: high
+        dependsOn:
+          - step: installdeps
+            condition:
+              type: succeeded
+      - name: build
+        description: Isolated makepkg build with full log capture and design-artifact snapshots
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: build
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-installdeps-passed
+            condition:
+              type: succeeded
+      - name: assert-build-passed
+        description: Fail if makepkg did not produce a package artifact
+        task:
+          type: assert
+          expr: data.latest("packager", "build-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: makepkg build failed — inspect build evidence and buildlog for this package version
+          severity: high
+        dependsOn:
+          - step: build
+            condition:
+              type: succeeded
+      - name: vet
+        description: Lint the PKGBUILD and audit the built package
+        task:
+          type: workflow
+          workflowIdOrName: vet-package
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name }}
+            version: ${{ inputs.version }}
+        dependsOn:
+          - step: assert-build-passed
+            condition:
+              type: succeeded
+      - name: mark-built
+        description: >-
+          Record the successful build on the package request (approved →
+          unstable). Skipped when no approved request exists for this package
+          (standalone runs, rebuilds of already-promoted packages).
+        guard: ${{ data.latest("requests", "request-" + inputs.name).?attributes.?status.orValue("") != "approved" }}
+        task:
+          type: model_method
+          modelIdOrName: requests
+          methodName: mark-built
+          inputs:
+            pkgname: ${{ inputs.name }}
+            version: ${{ inputs.version }}
+        dependsOn:
+          - step: vet
+            condition:
+              type: succeeded
+    dependsOn: []
+  - name: finalize
+    description: Assemble the durable per-package dossier from stage evidence — runs on success AND failure
+    dependsOn:
+      - job: build
+        condition:
+          type: completed
+    steps:
+      - name: dossier
+        description: Store dossier-<name>-<version> as infinite packager data
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: dossier
+          inputs:
+            name: ${{ inputs.name + "-" + inputs.version }}
+            pkgname: ${{ inputs.name }}
+        dependsOn: []
+reports:
+  require:
+    - "@omarchy/package-dossier"
+version: 1

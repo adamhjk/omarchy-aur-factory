@@ -1,0 +1,17 @@
+pkgbase = lazydocker-bin
+	pkgdesc = Simple terminal UI for both docker and docker-compose, prebuilt binary release
+	pkgver = 0.25.2
+	pkgrel = 1
+	url = https://github.com/jesseduffield/lazydocker
+	arch = x86_64
+	license = MIT
+	optdepends = docker: manage Docker containers
+	optdepends = docker-compose: manage docker-compose services
+	provides = lazydocker=0.25.2
+	conflicts = lazydocker
+	options = !strip
+	options = !debug
+	source_x86_64 = lazydocker-bin-0.25.2.tar.gz::https://github.com/jesseduffield/lazydocker/releases/download/v0.25.2/lazydocker_0.25.2_Linux_x86_64.tar.gz
+	sha256sums_x86_64 = 0d9dbfc26068b218e7ed84b104748cadc6e3cf733c0afd35465306fb39b9523c
+
+pkgname = lazydocker-bin

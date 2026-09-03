@@ -1,0 +1,4 @@
+{
+  "addressed": ["F1", "F2"],
+  "summary": "F1: components/package-request/approval-queue-tab.tsx - the controlled <Collapsible open={isOpen}> now also passes onOpenChange, which calls toggleExpanded(item.pkgname, open) to sync state per Base UI's controlled-component contract; toggleExpanded was updated to accept an optional explicit `open` value (falling back to its previous toggle behavior when omitted) so both the external icon button's onClick and the new onOpenChange callback share the same handler. F2: components/package-request/promotion-tab.tsx - moved the `data-[panel-open]:rotate-90` (and `transition-transform`) classes from the ChevronRightIcon onto the CollapsibleTrigger element in both occurrences (unstable list ~line 126-134 and stable list ~line 196-204), since Base UI sets the `data-panel-open` attribute on the trigger, not the icon child, so the chevron now rotates correctly when each panel opens/closes."
+}

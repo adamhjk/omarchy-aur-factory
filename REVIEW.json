@@ -1,0 +1,17 @@
+{
+  "verdict": "request_changes",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "file": "components/package-request/approval-queue-tab.tsx",
+      "description": "Base UI Collapsible API misuse: Line 231 uses controlled mode with `open={isOpen}` but omits required `onOpenChange` handler. When using Base UI's Collapsible in controlled mode, both `open` and `onOpenChange` props are required. Without `onOpenChange`, the component will not respond to state changes correctly and may fail to animate. Fix by adding `onOpenChange={() => {}}` or by refactoring the trigger pattern."
+    },
+    {
+      "id": "F2",
+      "severity": "minor",
+      "file": "components/package-request/request-details-panel.tsx",
+      "description": "History timeline uses non-stable React key: Line 95 uses `key={`${entry.at}-${index}`}` combining timestamp and array index. This is fragile if history entries are ever reordered or entries have identical timestamps. Use a stable unique identifier per entry if available from the data model."
+    }
+  ]
+}

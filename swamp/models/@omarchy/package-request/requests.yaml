@@ -1,0 +1,8 @@
+type: '@omarchy/package-request'
+typeVersion: 2026.09.03.1
+id: bb77dff2-e249-4db0-a5bc-27bf7c5a6d72
+name: requests
+version: 1
+tags: {}
+globalArguments: {}
+methods: {}

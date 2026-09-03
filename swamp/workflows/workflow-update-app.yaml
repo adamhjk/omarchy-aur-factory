@@ -1,0 +1,105 @@
+id: 433be8c9-cf41-4abb-bbf5-320915835225
+name: update-app
+description: >-
+  Software-factory pipeline for the omarchy-package-request web app: implement
+  a work request via a Claude call (edit tools + Next.js/shadcn skills), verify
+  deterministically (npm test + build), then run the bounded review loop (a
+  lower-cost model critiques once; only that critique is fixed; later rounds
+  verify and may flag only fix-introduced problems; max 3 rounds — the cap is
+  enforced in the model code). Evidence keyed <stage>-<name> on the app-factory
+  model.
+tags:
+  factory: app
+inputs:
+  type: object
+  properties:
+    appDir:
+      type: string
+      description: Absolute path to the application directory
+    name:
+      type: string
+      description: Work-item evidence key, e.g. wi-001-request-form
+    request:
+      type: string
+      description: The work request in plain language
+  required:
+    - appDir
+    - name
+    - request
+jobs:
+  - name: work
+    description: Implement, verify, review
+    steps:
+      - name: implement
+        description: Claude implementation call with edit tools and project skills
+        task:
+          type: model_method
+          modelIdOrName: app-factory
+          methodName: implement
+          inputs:
+            appDir: ${{ inputs.appDir }}
+            name: ${{ inputs.name }}
+            request: ${{ inputs.request }}
+        dependsOn: []
+      - name: assert-implement-passed
+        description: Fail if the implementation call produced no structured WORK.json
+        task:
+          type: assert
+          expr: data.latest("app-factory", "implement-" + inputs.name).attributes.passed == true
+          message: Implementation failed — inspect implement evidence and implementlog for this work item
+          severity: high
+        dependsOn:
+          - step: implement
+            condition:
+              type: succeeded
+      - name: test
+        description: Deterministic verification — npm test and npm run build
+        task:
+          type: model_method
+          modelIdOrName: app-factory
+          methodName: test
+          inputs:
+            appDir: ${{ inputs.appDir }}
+            name: ${{ inputs.name }}
+        dependsOn:
+          - step: assert-implement-passed
+            condition:
+              type: succeeded
+      - name: assert-test-passed
+        description: Fail if tests or the production build fail
+        task:
+          type: assert
+          expr: data.latest("app-factory", "test-" + inputs.name).attributes.passed == true
+          message: Tests or build failed — inspect test evidence and testlog for this work item
+          severity: high
+        dependsOn:
+          - step: test
+            condition:
+              type: succeeded
+      - name: review
+        description: Bounded review loop (lower model, max 3 rounds, first-round critique only)
+        task:
+          type: model_method
+          modelIdOrName: app-factory
+          methodName: review
+          inputs:
+            appDir: ${{ inputs.appDir }}
+            name: ${{ inputs.name }}
+            request: ${{ inputs.request }}
+        dependsOn:
+          - step: assert-test-passed
+            condition:
+              type: succeeded
+      - name: assert-review-passed
+        description: Fail if blocking findings remain open or tests broke during fixes
+        task:
+          type: assert
+          expr: data.latest("app-factory", "review-" + inputs.name).attributes.passed == true
+          message: Review left open critical/major findings or broke tests — inspect review evidence and reviewlog
+          severity: high
+        dependsOn:
+          - step: review
+            condition:
+              type: succeeded
+    dependsOn: []
+version: 1

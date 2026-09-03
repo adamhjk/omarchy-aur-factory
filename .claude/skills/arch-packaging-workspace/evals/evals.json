@@ -1,0 +1,50 @@
+{
+  "skill_name": "arch-packaging",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "c-makefile-sl",
+      "prompt": "Package the 'sl' program (https://github.com/mtoyoda/sl, the steam locomotive joke command) for Arch Linux. Use the latest tagged release. Create a proper PKGBUILD, build the package, and make sure it's correct and installable.",
+      "expected_output": "A package directory with a best-practices PKGBUILD (correct deps on ncurses, real sha256sums, license handling for sl's custom license, no /usr/local paths) and a built sl-*.pkg.tar.zst that contains /usr/bin/sl and a man page.",
+      "files": [],
+      "assertions": [
+        "Built package exists (*.pkg.tar.zst) and pacman -Qlp lists /usr/bin/sl",
+        "Package contains a man page under usr/share/man/man1/",
+        "PKGBUILD depends array includes ncurses",
+        "No package files under /usr/local, /bin, or /sbin",
+        "sha256sums contains a real checksum, not SKIP",
+        "PKGBUILD parses cleanly with makepkg --printsrcinfo"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "rust-shellharden",
+      "prompt": "I want an Arch package for shellharden (https://github.com/anordal/shellharden), the shell script hardening tool written in Rust. Latest release. Write the PKGBUILD following Arch best practices, build it, and validate it.",
+      "expected_output": "PKGBUILD using cargo fetch --locked in prepare(), --frozen --release build, check() with cargo test, gcc-libs/glibc depends, cargo makedepends, and a built package with /usr/bin/shellharden.",
+      "files": [],
+      "assertions": [
+        "Built package exists and pacman -Qlp lists /usr/bin/shellharden",
+        "prepare() runs cargo fetch with --locked",
+        "build() uses --frozen or --locked --offline (offline build against Cargo.lock)",
+        "check() function present and runs cargo test",
+        "makedepends includes cargo (or rust); depends includes gcc-libs",
+        "PKGBUILD parses cleanly with makepkg --printsrcinfo"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "bin-lazydocker",
+      "prompt": "Create an Arch Linux -bin package for lazydocker from its prebuilt GitHub release binaries (https://github.com/jesseduffield/lazydocker). Latest release, x86_64. PKGBUILD plus built package, validated.",
+      "expected_output": "lazydocker-bin PKGBUILD with provides/conflicts=(lazydocker), arch=(x86_64), options=(!strip) or similar for the prebuilt Go binary, unique source filename via ::, real checksum, license installed, built package containing /usr/bin/lazydocker.",
+      "files": [],
+      "assertions": [
+        "Built package exists and pacman -Qlp lists /usr/bin/lazydocker",
+        "pkgname is lazydocker-bin with provides=(lazydocker) and conflicts=(lazydocker)",
+        "source entry renames the download to a unique filename with :: syntax",
+        "Checksum is real, not SKIP",
+        "License file installed under usr/share/licenses/",
+        "PKGBUILD parses cleanly with makepkg --printsrcinfo"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+id: c4183ccc-4b84-45c8-a65d-f5a8d6119872
+name: vet-package
+description: >-
+  Vet an Arch Linux package: lint the PKGBUILD, audit the built package
+  artifact, and assert both stages passed. All evidence is written as
+  versioned data on the package-vet model, keyed lint-<name>-<version> /
+  audit-<name>-<version> (raw tool output in lintlog-*/auditlog-* files).
+tags:
+  factory: arch-packaging
+inputs:
+  type: object
+  properties:
+    dir:
+      type: string
+      description: Absolute path to the directory containing the PKGBUILD and built *.pkg.tar.zst
+    name:
+      type: string
+      description: Package name (pkgname), e.g. sl
+    version:
+      type: string
+      description: Full package version <pkgver>-<pkgrel>, e.g. 5.02-1
+  required:
+    - dir
+    - name
+    - version
+jobs:
+  - name: vet
+    description: Lint the PKGBUILD, audit the built package, assert both passed
+    steps:
+      - name: lint
+        description: Static PKGBUILD lint (parse, shellcheck, namcap, policy)
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: lint
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn: []
+      - name: audit
+        description: Audit the built .pkg.tar.zst (file list, metadata, namcap)
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: audit
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: lint
+            condition:
+              type: succeeded
+      - name: assert-lint-passed
+        description: Fail the workflow if the PKGBUILD lint found hard failures
+        task:
+          type: assert
+          expr: data.latest("packager", "lint-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: PKGBUILD lint failed — inspect lint evidence and lintlog for this package version
+          severity: high
+        dependsOn:
+          - step: lint
+            condition:
+              type: succeeded
+      - name: assert-audit-passed
+        description: Fail the workflow if the package audit found hard failures
+        task:
+          type: assert
+          expr: data.latest("packager", "audit-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: Package audit failed — inspect audit evidence and auditlog for this package version
+          severity: high
+        dependsOn:
+          - step: audit
+            condition:
+              type: succeeded
+    dependsOn: []
+reports:
+  require:
+    - "@omarchy/package-dossier"
+version: 1

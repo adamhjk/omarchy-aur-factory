@@ -1,0 +1,28 @@
+# Maintainer: Adam <adam@swamp-club.com>
+pkgname=sl
+pkgver=5.02
+pkgrel=1
+pkgdesc="Steam locomotive that runs across your terminal when you mistype 'ls'"
+arch=(x86_64)
+url="https://github.com/mtoyoda/sl"
+license=(LicenseRef-sl)
+depends=(glibc ncurses)
+source=("$pkgname-$pkgver.tar.gz::https://github.com/mtoyoda/sl/archive/$pkgver.tar.gz")
+sha256sums=('1e5996757f879c81f202a18ad8e982195cf51c41727d3fea4af01fdcbbb5563a')
+
+build() {
+  cd "$pkgname-$pkgver"
+  # Upstream Makefile hardcodes CFLAGS=-O; pass makepkg's flags instead.
+  # The single compile+link rule uses only $(CFLAGS), so append LDFLAGS to it.
+  make CC="${CC:-cc}" CFLAGS="$CFLAGS $LDFLAGS"
+}
+
+# No check(): upstream ships no test suite (only a single-rule Makefile).
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 sl -t "$pkgdir/usr/bin/"
+  install -Dm644 sl.1 -t "$pkgdir/usr/share/man/man1/"
+  install -Dm644 sl.1.ja "$pkgdir/usr/share/man/ja/man1/sl.1"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname/"
+}

@@ -1,0 +1,14 @@
+{
+  "rationale": "figlet 2.2.5 uses a plain hand-written Makefile (no autotools/CMake/Meson), so I overrode its configuration variables (prefix, BINDIR, MANDIR, DEFAULTFONTDIR) on the make command line rather than patching the Makefile, keeping the source tree untouched. build() compiles with makepkg's CFLAGS/LDFLAGS preserved (the upstream Makefile's own CFLAGS get overridden by the environment since make command-line assignments win). check() runs the bundled run-tests.sh against the in-tree fonts directory, which compares figlet's rendering output against tests/resNNN.txt fixtures and exits non-zero on failure - a genuine upstream test suite. package() reuses the Makefile's install target with DESTDIR=\"$pkgdir\" and the same path overrides, which installs the four binaries (figlet, chkfont, figlist, showfigfonts - the latter two are shipped shell scripts, not built from source) into /usr/bin, man pages into /usr/share/man/man6, and .flf/.flc font files into /usr/share/figlet. License text and a few upstream docs (README, CHANGES, FAQ, figfont.txt - the font format spec referenced by chkfont's own docs) are installed manually since the Makefile doesn't do so.",
+  "dependencies": {
+    "depends": ["glibc"],
+    "makedepends": [],
+    "reasoning": "figlet is a small, dependency-free C program built entirely from files in this tarball (own zlib-like inflate.c/zipio.c/crc.c implementation, own getopt.c) - it links only against the C library, which is provided by base-devel/base (glibc) and doesn't need an explicit makedepend beyond the assumed base-devel toolchain (gcc/make)."
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "reasoning": "The LICENSE file is the classic 3-clause BSD text (copyright notice + redistribution conditions + no-endorsement clause + disclaimer), matching SPDX BSD-3-Clause exactly, and matches the license requested for this package."
+  },
+  "deviations": "None from the reference documentation. The only notable choice is overriding the Makefile's install-path variables via command-line make arguments instead of patching the Makefile in prepare(), since the Makefile already supports DESTDIR and all the needed path variables as make-overridable.",
+  "confidence": "high"
+}

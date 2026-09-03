@@ -1,0 +1,14 @@
+{
+  "rationale": "entr uses a small custom `configure` script (not autoconf) that just copies the correct platform Makefile (Makefile.linux on Linux) into place based on uname/libc feature detection; it is not interactive and needs no arguments. The resulting Makefile.bsd honors PREFIX/DESTDIR/CFLAGS/LDFLAGS, so build() runs ./configure then make with makepkg's CFLAGS/LDFLAGS passed through explicitly (the Makefile does not import CFLAGS/LDFLAGS from the environment implicitly in its rule, so they're passed as make variables), and package() installs via `make PREFIX=/usr DESTDIR=\"$pkgdir\" install`, which places the entr binary in /usr/bin and the man page in /usr/share/man/man1 per Makefile.bsd's install target. The LICENSE file is installed manually since the license is not one with common-license text shipped by the `licenses` package. No check() was added: system_test.sh is an interactive system/integration test that spawns tmux sessions and depends on tmux, vim, git, and pgrep being present and a controlling terminal, which is unsuitable for a non-interactive makepkg build environment (consistent with the analyze stage's 'has tests: false').",
+  "dependencies": {
+    "depends": ["glibc"],
+    "makedepends": [],
+    "reasoning": "entr is a small C program with no external library dependencies beyond libc (glibc, implicitly satisfied by base-devel/base but listed per convention); it uses kqueue on BSD/macOS and inotify on Linux, both accessed directly via glibc/kernel syscalls with no extra linked library. The build uses only cc/make, both provided by base-devel, so makedepends is empty."
+  },
+  "license": {
+    "spdx": "ISC AND BSD-2-Clause",
+    "reasoning": "LICENSE states the core entr source (entr.c, status.c, etc.) is under an ISC-style permission notice (matches SPDX ISC exactly), while some compatibility shims under missing/ (from OpenBSD/historical BSD code by Jonathan Lemon) are under a 2-clause BSD license (SPDX BSD-2-Clause). The task-requested 'ISC' covers the main code; BSD-2-Clause is added to reflect the missing/ directory content actually shipped in the tarball. license= array uses both identifiers per SPDX combination convention."
+  },
+  "deviations": "Requested license was 'ISC' only; I used license=(ISC BSD-2-Clause) because LICENSE explicitly documents a second BSD-2-Clause-licensed portion (missing/ compat code) bundled in the source tarball. Omitted check() despite autotools-style layout because the only test script (system_test.sh) is an interactive tmux/vim/git-dependent system test, not a suitable non-interactive unit test target.",
+  "confidence": "high"
+}
