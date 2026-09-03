@@ -16,6 +16,7 @@ import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/prog
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { Markdown } from "@/components/markdown"
+import { isStaleRun } from "@/lib/build-run-freshness"
 import { cn } from "@/lib/utils"
 import type { BuildStatus } from "@/lib/swamp"
 
@@ -61,6 +62,12 @@ export function BuildSection({ pkgname }: { pkgname: string }) {
   // Bumped after a successful retry to restart the poll loop below (a fresh
   // build run needs fresh polling even though `pkgname` hasn't changed).
   const [retryTick, setRetryTick] = useState(0)
+  // Client-clock timestamp of the most recent retry. While set, any run
+  // returned by build-status whose startedAt predates it (see isStaleRun)
+  // is treated as belonging to the previous attempt and not rendered --
+  // otherwise the checklist flashes the old attempt's step statuses until
+  // the new run overtakes it in the history search.
+  const [retryAt, setRetryAt] = useState<number | null>(null)
   const [hints, setHints] = useState("")
   const [retrying, setRetrying] = useState(false)
 
@@ -83,8 +90,18 @@ export function BuildSection({ pkgname }: { pkgname: string }) {
         setError(null)
         setData(status)
 
+        // Right after a retry, the previous attempt's (possibly terminal)
+        // run may still be what build-status returns until the new
+        // create-package run shows up in history search -- keep polling
+        // through that window instead of stopping on the stale run's
+        // terminal status.
+        const awaitingFreshRun =
+          retryAt !== null && (!status.run || isStaleRun(status.run.startedAt, retryAt))
         const shouldContinue =
-          status.building && !status.dossier && ACTIVE_RUN_STATUSES.has(status.run?.status ?? "")
+          awaitingFreshRun ||
+          (status.building &&
+            !status.dossier &&
+            ACTIVE_RUN_STATUSES.has(status.run?.status ?? ""))
         if (shouldContinue) {
           timer = setTimeout(poll, POLL_INTERVAL_MS)
         }
@@ -101,7 +118,7 @@ export function BuildSection({ pkgname }: { pkgname: string }) {
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [pkgname, retryTick])
+  }, [pkgname, retryTick, retryAt])
 
   async function retryWithHints() {
     if (!hints.trim()) return
@@ -131,8 +148,11 @@ export function BuildSection({ pkgname }: { pkgname: string }) {
       })
       setHints("")
       // Restart polling: a fresh create-package run has just been spawned.
+      // Wipe the displayed run immediately and record when this retry fired
+      // so stale (previous-attempt) statuses aren't shown in the meantime.
       setData(null)
       setError(null)
+      setRetryAt(Date.now())
       setRetryTick((tick) => tick + 1)
     } catch (err) {
       toast.add({
@@ -145,6 +165,14 @@ export function BuildSection({ pkgname }: { pkgname: string }) {
     }
   }
 
+  // While a retry is in flight, build-status may still report the previous
+  // attempt's (possibly terminal) run until the new create-package run
+  // shows up in history search. Keep showing "Starting new build…" instead
+  // of that stale run's steps until one that actually started at/after the
+  // retry appears.
+  const awaitingFreshRun =
+    retryAt !== null && (!data?.run || isStaleRun(data.run.startedAt, retryAt))
+
   return (
     <div className="flex flex-col gap-2 border-t pt-4">
       <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -153,18 +181,22 @@ export function BuildSection({ pkgname }: { pkgname: string }) {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {!error && !data && (
+      {!error && awaitingFreshRun && (
+        <p className="text-sm text-muted-foreground">Starting new build…</p>
+      )}
+
+      {!error && !awaitingFreshRun && !data && (
         <p className="text-sm text-muted-foreground">Loading build status…</p>
       )}
 
-      {!error && data && !data.run && (
+      {!error && !awaitingFreshRun && data && !data.run && (
         <p className="text-sm text-muted-foreground">
           No build run found yet for this package.
         </p>
       )}
 
-      {!error && data?.run && (
-        <div className="flex flex-col gap-3">
+      {!error && !awaitingFreshRun && data?.run && (
+        <div key={data.run.runId} className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium">{data.run.status}</span>
             <span className="text-xs text-muted-foreground">

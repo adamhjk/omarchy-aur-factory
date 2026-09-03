@@ -489,7 +489,14 @@ export async function getBuildStatus(pkgname: string): Promise<BuildStatus> {
     `workflowName == "build-package" && inputs.name == ${celString(pkgname)}`
   )
   const newestBuild = newestRun(buildRuns)
-  if (newestBuild) {
+  // Only fold in the nested build-package run's steps when it belongs to
+  // this attempt (started at/after the selected create-package run) --
+  // otherwise it's a leftover from a previous retry and must be excluded,
+  // even if that means falling back to the parent's coarser steps.
+  if (
+    newestBuild &&
+    new Date(newestBuild.startedAt).getTime() >= new Date(newestCreate.startedAt).getTime()
+  ) {
     const buildDetail = await getRunDetail(newestBuild.runId)
     steps = steps.concat(flattenSteps(buildDetail))
   }

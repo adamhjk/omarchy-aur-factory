@@ -485,6 +485,126 @@ describe("getBuildStatus", () => {
       "--markdown",
     ])
   })
+
+  it("excludes a build-package run's steps when it started before the selected create-package run (stale retry attribution)", async () => {
+    // The newest create-package run is a fresh retry; the newest build-package
+    // run on record is from the *previous* attempt (started earlier) and must
+    // not have its steps merged in -- only the parent's coarse steps show.
+    mockExecFileOnce(
+      JSON.stringify({
+        results: [
+          {
+            runId: "create-2",
+            status: "running",
+            startedAt: "2026-03-01T00:10:00.000Z",
+            stepProgress: { completed: 1, total: 5 },
+          },
+        ],
+      })
+    )
+    mockExecFileOnce(
+      JSON.stringify({
+        status: "running",
+        jobs: [
+          {
+            name: "design",
+            status: "running",
+            steps: [{ name: "analyze", status: "running", duration: undefined }],
+          },
+        ],
+      })
+    )
+    mockExecFileOnce(
+      JSON.stringify({
+        results: [
+          {
+            runId: "build-1",
+            status: "succeeded",
+            startedAt: "2026-03-01T00:00:00.000Z",
+            stepProgress: { completed: 5, total: 5 },
+          },
+        ],
+      })
+    )
+
+    const result = await getBuildStatus("entr")
+
+    expect(result.run).toEqual({
+      runId: "create-2",
+      status: "running",
+      startedAt: "2026-03-01T00:10:00.000Z",
+      stepProgress: { completed: 1, total: 5 },
+    })
+    // Only the parent's own steps -- the stale build-package run's steps are excluded.
+    expect(result.steps).toEqual([
+      { job: "design", name: "analyze", status: "running", duration: undefined },
+    ])
+    // The stale build-package run's detail must never even be fetched.
+    expect(mockedExecFile).toHaveBeenCalledTimes(3)
+  })
+
+  it("includes a build-package run's steps when it started at/after the selected create-package run", async () => {
+    mockExecFileOnce(
+      JSON.stringify({
+        results: [
+          {
+            runId: "create-2",
+            status: "running",
+            startedAt: "2026-03-01T00:10:00.000Z",
+            stepProgress: { completed: 1, total: 5 },
+          },
+        ],
+      })
+    )
+    mockExecFileOnce(
+      JSON.stringify({
+        status: "running",
+        jobs: [
+          {
+            name: "design",
+            status: "succeeded",
+            steps: [{ name: "analyze", status: "succeeded", duration: 50 }],
+          },
+        ],
+      })
+    )
+    mockExecFileOnce(
+      JSON.stringify({
+        results: [
+          {
+            runId: "build-2",
+            status: "running",
+            startedAt: "2026-03-01T00:10:30.000Z",
+            stepProgress: { completed: 1, total: 3 },
+          },
+        ],
+      })
+    )
+    mockExecFileOnce(
+      JSON.stringify({
+        status: "running",
+        jobs: [
+          {
+            name: "build",
+            status: "running",
+            steps: [{ name: "checksums", status: "succeeded", duration: 10 }],
+          },
+        ],
+      })
+    )
+
+    const result = await getBuildStatus("entr")
+
+    expect(result.steps).toEqual([
+      { job: "design", name: "analyze", status: "succeeded", duration: 50 },
+      { job: "build", name: "checksums", status: "succeeded", duration: 10 },
+    ])
+    // Search + detail for both the create-package and build-package runs;
+    // status is still "running" so the dossier isn't attempted.
+    expect(mockedExecFile).toHaveBeenCalledTimes(4)
+    const [, buildDetailArgs] = mockedExecFile.mock.calls[3]
+    expect(buildDetailArgs).toEqual(["workflow", "history", "get", "build-2", "--json"])
+  })
 })
 
 describe("error-envelope handling", () => {
