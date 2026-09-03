@@ -111,25 +111,17 @@ swamp workflow run build-package \
 ## Retry a failed build with maintainer hints
 
 Some packages need a round or two — that is what the retry loop is for. lazygit
-is the canonical exercise: a complex Go program whose test suite includes
-integration tests that typically fail under makepkg's sandbox, so the first
-build fails in check(). Submit it, watch the build phase fail in the Approval
-queue, expand the check phase to read the colored test output, then hit Retry
-with a hint shaped like this (the app's Retry button, or
-`--input "hints=..."` on a `create-package` run):
+is the canonical exercise: its first build fails in check(). Watch it fail in
+the Approval queue, expand the check phase to see the error, then hit Retry
+(or `--input "hints=..."` on `create-package`) with the failure pasted in:
 
 ```
-check() failed with: <paste the failing test name(s) and error output from the
-build log>. Look at those tests' source in the unpacked tree and work out WHY
-they fail under the makepkg build sandbox, then update the PKGBUILD
-accordingly: prefer running the suite the way upstream does, exclude only what
-is genuinely environment-bound, and document the reasoning in a comment.
+test failed with "must run in lazy project folder or child folder", figure it out
 ```
 
-You do not have to diagnose it yourself — hand the author the evidence and let
-it investigate; its analysis lands in the next dossier's design rationale. More
-prescriptive hints also work when you already know the answer (real ones from
-packaging swamp itself, in escalating precision):
+Hand the author the evidence and let it investigate — its analysis lands in the
+next dossier's design rationale. Prescriptive hints also work when you already
+know the answer (real ones from packaging swamp itself):
 
 - "check() fails: the http networking test simulates connection resets and is
   unreliable under makepkg — exclude that one test file, keep the rest of check()."
