@@ -87,6 +87,7 @@ Known-good starters, each proven through this factory:
 | entr | https://github.com/eradman/entr/archive/refs/tags/5.8.tar.gz | Run arbitrary commands when files change | ISC |
 | shellharden | https://github.com/anordal/shellharden/archive/refs/tags/v4.3.2.tar.gz | Shell script hardening tool (Rust) | MPL-2.0 |
 | htop | https://github.com/htop-dev/htop/archive/refs/tags/3.5.3.tar.gz | Interactive process viewer | GPL-2.0-only |
+| lazygit | https://github.com/jesseduffield/lazygit/archive/refs/tags/v0.64.1.tar.gz | Simple terminal UI for git commands | MIT |
 
 Full pipeline from the CLI (what the app's approve button runs):
 
@@ -109,8 +110,26 @@ swamp workflow run build-package \
 
 ## Retry a failed build with maintainer hints
 
-Add `--input "hints=..."` to a `create-package` run (the app's Retry button does
-this). Real hints that worked, in escalating precision:
+Some packages need a round or two — that is what the retry loop is for. lazygit
+is the canonical exercise: a complex Go program whose test suite includes
+integration tests that typically fail under makepkg's sandbox, so the first
+build fails in check(). Submit it, watch the build phase fail in the Approval
+queue, expand the check phase to read the colored test output, then hit Retry
+with a hint shaped like this (the app's Retry button, or
+`--input "hints=..."` on a `create-package` run):
+
+```
+check() failed with: <paste the failing test name(s) and error output from the
+build log>. Look at those tests' source in the unpacked tree and work out WHY
+they fail under the makepkg build sandbox, then update the PKGBUILD
+accordingly: prefer running the suite the way upstream does, exclude only what
+is genuinely environment-bound, and document the reasoning in a comment.
+```
+
+You do not have to diagnose it yourself — hand the author the evidence and let
+it investigate; its analysis lands in the next dossier's design rationale. More
+prescriptive hints also work when you already know the answer (real ones from
+packaging swamp itself, in escalating precision):
 
 - "check() fails: the http networking test simulates connection resets and is
   unreliable under makepkg — exclude that one test file, keep the rest of check()."
