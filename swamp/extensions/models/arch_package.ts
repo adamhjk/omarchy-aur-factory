@@ -197,7 +197,7 @@ Rules:
 - Set pkgver to the version evident from the source tree / URL; pkgrel=1.
 - When you are done, write DESIGN.json in the current directory with EXACTLY this shape:
   {
-    "rationale": "<how you designed this PKGBUILD and why>",
+    "rationale": "<how you designed this PKGBUILD and why — written as readable markdown: short paragraphs and bullet points, one point per decision; never one long paragraph>",
     "dependencies": { "depends": [..], "makedepends": [..], "reasoning": "<why these>" },
     "license": { "spdx": "<identifier used>", "reasoning": "<how you mapped it>" },
     "deviations": "<anything where you deviated from the references, and why; empty string if none>",

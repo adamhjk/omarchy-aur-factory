@@ -100,10 +100,6 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
 
   return (
     <div className="flex flex-col gap-2 border-t pt-4">
-      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        Build report
-      </span>
-
       {error && (
         <div className="flex items-center gap-2">
           <p className="text-sm text-destructive">{error}</p>
@@ -140,34 +136,35 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
         <p className="text-sm text-muted-foreground">No build report available.</p>
       )}
 
-      {/* The durable-dossier path returns markdown with json: null — the
-          report must render whenever markdown exists; badges only need json. */}
+      {/* One disclosure, one name: "Build report" opens directly into the
+          rendered dossier. The durable-dossier path returns markdown with
+          json: null — render whenever markdown exists; badges only need json. */}
       {!error && data?.source === "report" && data.markdown && (
-        <div className="flex flex-col gap-2">
-          {data.json && (
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(data.json.stages).map(([name, stage]) =>
-                stage ? (
-                  <Badge key={name} variant={stage.passed ? "default" : "destructive"}>
-                    {name}: {stage.passed ? "pass" : "fail"}
-                  </Badge>
-                ) : null
-              )}
-            </div>
-          )}
-          <Collapsible>
+        <Collapsible>
+          <div className="flex flex-wrap items-center gap-2">
             <CollapsibleTrigger
               className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}
             >
-              Full dossier
+              Build report
             </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-2 max-h-96 overflow-auto rounded-md border p-3">
-                {data.markdown && <Markdown>{data.markdown}</Markdown>}
+            {data.json && (
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(data.json.stages).map(([name, stage]) =>
+                  stage ? (
+                    <Badge key={name} variant={stage.passed ? "default" : "destructive"}>
+                      {name}: {stage.passed ? "pass" : "fail"}
+                    </Badge>
+                  ) : null
+                )}
               </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
+            )}
+          </div>
+          <CollapsibleContent>
+            <div className="mt-2 max-h-96 overflow-auto rounded-md border p-3">
+              <Markdown>{data.markdown}</Markdown>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {!error && data?.source === "evidence" && data.evidence && (
