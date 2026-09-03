@@ -82,7 +82,6 @@ jobs:
             description: ${{ inputs.description }}
             license: ${{ inputs.license }}
             analysisKey: ${{ inputs.pkgname }}
-            referencesDir: /home/adam/src/omarchy-aur-factory/.claude/skills/arch-packaging/references
             hints: ${{ inputs.?hints.orValue("") }}
         dependsOn:
           - step: assert-analyze-passed

@@ -56,3 +56,22 @@ When the approvals are met for unstable->stable promotion, moves the package to 
 For now, this is unimplemented. But the idea is that you would check every package for new releases on an interval.
 
 
+
+# New box bootstrap
+
+All you need is [swamp](https://github.com/swamp-club/swamp) (and `git`):
+
+```
+git clone <this repo> && cd omarchy-aur-factory/swamp
+swamp auth login
+swamp model @omarchy/factory-setup method run converge setup
+```
+
+`converge` is idempotent: it bootstraps the isolated build rootfs (user
+namespaces — no sudo, no containers to install), installs the web app's
+dependencies, and probes every prerequisite with real operations. Anything it
+cannot fix without privileges (base-devel, pacman-contrib, nodejs/npm, the
+claude CLI, a missing /etc/subuid entry) is reported as `missing` with the
+exact remediation command. Re-run until it reports `passed` with nothing
+missing; `--input deep=true` additionally builds and vets the seed package
+end-to-end. Evidence: `swamp data get setup setup`.

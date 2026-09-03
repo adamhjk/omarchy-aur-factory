@@ -1,0 +1,8 @@
+type: '@omarchy/factory-setup'
+typeVersion: 2026.09.03.1
+id: 64b01d42-6bd1-4776-8867-5e0ad7f88642
+name: setup
+version: 1
+tags: {}
+globalArguments: {}
+methods: {}

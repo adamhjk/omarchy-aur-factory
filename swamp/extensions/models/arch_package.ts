@@ -172,7 +172,9 @@ const AuthorArgsSchema = z.object({
   description: z.string().describe("Requested package description"),
   license: z.string().default("").describe("Requested license (SPDX), if the requester supplied one"),
   analysisKey: z.string().describe("Evidence key of a prior analyze run to base authoring on (reads analysis-<key>)"),
-  referencesDir: z.string().describe("Absolute path to the arch-packaging skill references directory (pkgbuild.md + ecosystem files)"),
+  referencesDir: z.string().default("").describe(
+    "Path to the arch-packaging skill references (pkgbuild.md + ecosystem files); empty = <repo>/.claude/skills/arch-packaging/references derived from the swamp repo location",
+  ),
   model: z.string().default("claude-sonnet-5").describe("Model for the authoring call"),
   hints: z.string().default("").describe(
     "Maintainer hints for this authoring attempt (e.g. why a previous build failed and what to change)",
@@ -760,6 +762,7 @@ export const model = {
         context: {
           globalArgs: GlobalArgs;
           logger: Logger;
+          repoDir: string;
           readResource: (name: string) => Promise<Record<string, unknown> | null>;
           writeResource: WriteResourceFn;
           createFileWriter: FileWriterFn;
@@ -773,13 +776,15 @@ export const model = {
           throw new Error(`No analysis evidence 'analysis-${args.analysisKey}' — run analyze first`);
         }
 
+        const refsDir = args.referencesDir ||
+          `${context.repoDir}/../.claude/skills/arch-packaging/references`;
         let pkgbuildRef: string;
         let ecoRef: string;
         try {
-          pkgbuildRef = await Deno.readTextFile(`${args.referencesDir}/pkgbuild.md`);
-          ecoRef = await Deno.readTextFile(`${args.referencesDir}/${analysis.reference}`);
+          pkgbuildRef = await Deno.readTextFile(`${refsDir}/pkgbuild.md`);
+          ecoRef = await Deno.readTextFile(`${refsDir}/${analysis.reference}`);
         } catch (err) {
-          throw new Error(`Cannot read skill references from ${args.referencesDir}: ${err}`);
+          throw new Error(`Cannot read skill references from ${refsDir}: ${err}`);
         }
         const systemPrompt = `${AUTHOR_SYSTEM_PROMPT}\n\n# PKGBUILD reference\n\n${pkgbuildRef}\n\n# Ecosystem reference (${analysis.reference})\n\n${ecoRef}`;
 

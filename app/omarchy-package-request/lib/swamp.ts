@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process"
+import path from "node:path"
 import { mkdirSync } from "node:fs"
 
 /**
@@ -9,12 +10,14 @@ import { mkdirSync } from "node:fs"
  * interpreted as shell syntax.
  */
 
-export const SWAMP_DIR =
-  process.env.SWAMP_DIR || "/home/adam/src/omarchy-aur-factory/swamp"
+// Repo root derived from this app's location: <root>/app/omarchy-package-request
+const REPO_ROOT = path.resolve(process.cwd(), "..", "..")
+
+export const SWAMP_DIR = process.env.SWAMP_DIR || path.join(REPO_ROOT, "swamp")
 
 /** Where built packages land, passed as the create-package workflow's `dir` input. */
 export const PACKAGES_DIR =
-  process.env.PACKAGES_DIR || "/home/adam/src/omarchy-aur-factory/test-packages"
+  process.env.PACKAGES_DIR || path.join(REPO_ROOT, "test-packages")
 
 /** Scratch workdir for in-progress builds, passed as the workflow's `workdir` input. */
 export const BUILD_SCRATCH_DIR =

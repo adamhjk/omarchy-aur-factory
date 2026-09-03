@@ -4,6 +4,8 @@ All swamp commands should be run in the ./swamp subdirectory.
 
 # How work happens here
 
+New or drifted box? `swamp model @omarchy/factory-setup method run converge setup` — idempotent: fixes what it can without sudo (build rootfs, app deps, dirs), reports exact remediation for what it can't. `deep=true` also builds+vets the seed package. Evidence: `swamp data get setup setup`.
+
 Both packages and the web app are built through deterministic swamp pipelines that call out to intelligence only where judgment is needed, and every stage writes evidence as versioned swamp data. Prefer running the pipeline over doing its steps by hand; when a stage fails, read its evidence, fix the cause, and re-run the workflow.
 
 ## Working on packages
