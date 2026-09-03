@@ -77,7 +77,7 @@ swamp workflow run build-package \
   --input version=<pkgver>-<pkgrel>
 ```
 
-When a stage fails, read its evidence, fix the PKGBUILD, and re-run the workflow. For tight debug loops the manual equivalents are `makepkg -o` (fetch/extract once) then `makepkg -ef` (rebuild without re-downloading); never run makepkg as root. `vet-package` also runs standalone with the same inputs when you only changed metadata.
+If the audit fails, the workflow auto-fixes it: a constrained Claude call patches the PKGBUILD from the audit/lint findings and the checksums → installdeps → build → lint → audit chain re-runs, up to 3 total attempts before giving up. Evidence for those calls is `fix-<name>-<version>-attempt<n>` / `fixlog-…`. A checksums, installdeps, or build (i.e. non-audit) failure is not auto-retried — read its evidence, fix the PKGBUILD by hand, and re-run the workflow. For tight debug loops the manual equivalents are `makepkg -o` (fetch/extract once) then `makepkg -ef` (rebuild without re-downloading); never run makepkg as root. `vet-package` also runs standalone with the same inputs when you only changed metadata (no build).
 
 ## 5. Read the evidence
 
@@ -93,6 +93,7 @@ swamp data get packager audit-<name>-<version>       # structured audit findings
 swamp data get packager buildlog-<name>-<version>    # raw makepkg output (lintlog-/auditlog- likewise)
 swamp data get packager pkgbuild-<name>-<version>    # PKGBUILD snapshot at build time
 swamp data get packager note-<name>-<stage>          # recorded design rationale
+swamp data get packager fix-<name>-<version>-attempt<n>  # audit-retry Claude call (attempt 1, 2, ...)
 ```
 
 Fix every `fail`-level check and understand every `warn` before shipping. `references/validation.md` explains each check, the dependency-verification procedure (ldd against the built ELFs), and common namcap tags with fixes.

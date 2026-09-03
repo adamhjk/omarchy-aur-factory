@@ -105,6 +105,27 @@ const AuditSchema = z.object({
   timestamp: z.iso.datetime(),
 });
 
+const FixSchema = z.object({
+  name: z.string(),
+  dir: z.string(),
+  attempt: z.number(),
+  model: z.string(),
+  numTurns: z.number(),
+  durationMs: z.number(),
+  costUsd: z.number(),
+  parseOk: z.boolean(),
+  passed: z.boolean(),
+  timestamp: z.iso.datetime(),
+});
+
+const FixArgsSchema = z.object({
+  dir: z.string().describe("Absolute path to the directory containing the PKGBUILD"),
+  name: z.string().describe("Evidence key: <pkgname>-<pkgver>-<pkgrel> (reads lint-<name>/audit-<name>)"),
+  attempt: z.number().int().min(1).describe("Retry attempt number this fix belongs to (for evidence/dossier ordering)"),
+  model: z.string().default("claude-sonnet-5").describe("Model for the fix call"),
+});
+type FixArgs = z.infer<typeof FixArgsSchema>;
+
 const NoteSchema = z.object({
   name: z.string(),
   stage: z.string(),
@@ -473,7 +494,7 @@ type Logger = { info: (msg: string, props?: Record<string, unknown>) => void };
 /** Arch Linux packaging pipeline: analyze sources, update checksums, build, lint, audit — evidence stored as data. */
 export const model = {
   type: "@omarchy/arch-package",
-  version: "2026.09.03.1",
+  version: "2026.09.03.2",
   globalArguments: GlobalArgsSchema,
   resources: {
     "analysis": {
@@ -526,6 +547,13 @@ export const model = {
       lifetime: "infinite",
       garbageCollection: 20,
     },
+    "fix": {
+      description:
+        "Auto-fix evidence from the audit-retry loop's constrained Claude call (instance per attempt: fix-<name>-attempt<n>)",
+      schema: FixSchema,
+      lifetime: "infinite",
+      garbageCollection: 20,
+    },
   },
   files: {
     "log": {
@@ -566,6 +594,11 @@ export const model = {
         const lint = await read(`lint-${args.name}`);
         const audit = await read(`audit-${args.name}`);
         const note = await read(`note-${args.pkgname}-pkgbuild`);
+        const fixes: Array<Record<string, unknown>> = [];
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const fix = await read(`fix-${args.name}-attempt${attempt}`);
+          if (fix) fixes.push(fix);
+        }
         if (!build && !lint) {
           throw new Error(`No build/lint evidence for '${args.name}' — nothing to summarize`);
         }
@@ -613,6 +646,15 @@ export const model = {
         }
         if (audit) {
           md.push(`## Audit — ${line(audit)} (${audit.failCount} fail / ${audit.warnCount} warn)\n\n${checksTable(audit)}`);
+        }
+        if (fixes.length) {
+          md.push(`## Audit-retry fixes\n\n${
+            fixes.map((f) =>
+              `- **Attempt ${f.attempt}** — ${line(f)} (${((f.durationMs as number) / 1000).toFixed(1)}s, $${
+                (f.costUsd as number).toFixed(3)
+              })`
+            ).join("\n")
+          }\n`);
         }
         const pkgbuild = build
           ? await (async () => {
@@ -901,6 +943,109 @@ Write the PKGBUILD and DESIGN.json in the current directory.${
           timestamp: new Date().toISOString(),
         });
         return { dataHandles: [handle, noteHandle, logHandle] };
+      },
+    },
+    fix: {
+      description:
+        "Audit-retry loop: constrained Claude call that patches an existing PKGBUILD in place using lint/audit findings, then re-validates that it still parses. Does not build, install deps, or run tools itself — later pipeline stages redo that.",
+      arguments: FixArgsSchema,
+      execute: async (
+        args: FixArgs,
+        context: {
+          globalArgs: GlobalArgs;
+          logger: Logger;
+          readResource: (name: string) => Promise<Record<string, unknown> | null>;
+          writeResource: WriteResourceFn;
+          createFileWriter: FileWriterFn;
+        },
+      ) => {
+        try {
+          await Deno.stat(`${args.dir}/PKGBUILD`);
+        } catch {
+          throw new Error(`No PKGBUILD found at ${args.dir}/PKGBUILD`);
+        }
+        const audit = await context.readResource(`audit-${args.name}`) as
+          | z.infer<typeof AuditSchema>
+          | null;
+        if (!audit) {
+          throw new Error(`No audit evidence 'audit-${args.name}' — run audit before fix`);
+        }
+        const lint = await context.readResource(`lint-${args.name}`) as
+          | z.infer<typeof LintSchema>
+          | null;
+
+        const findings = (checks: Check[]) =>
+          checks.filter((c) => c.level !== "pass").map((c) =>
+            `- [${c.level}] ${c.name}: ${c.detail.split("\n").slice(0, 5).join("\n")}`
+          ).join("\n") || "(none)";
+
+        const task = `Attempt ${args.attempt}: this PKGBUILD builds successfully, but the built package failed audit. Fix the PKGBUILD in the current directory (${args.dir}) so the package passes.
+
+Audit findings (built .pkg.tar.zst inspection):
+${findings(audit.checks)}
+${lint ? `\nLint findings (PKGBUILD static checks, for context — fix these too if easy, but the audit findings above are what must be resolved):\n${findings(lint.checks)}` : ""}
+
+Rules:
+- Edit the PKGBUILD only; do not touch checksums (sha256sums) — a later stage regenerates them.
+- Keep pkgver/pkgrel unless a finding specifically indicates a version mismatch.
+- Make the smallest change that resolves the reported findings — this is a targeted fix, not a rewrite.
+- Do NOT build, download, or run anything — you do not have Bash. A later pipeline stage rebuilds and re-audits.`;
+
+        const started = Date.now();
+        const cl = await run("claude", [
+          "-p",
+          task,
+          "--allowedTools",
+          "Read",
+          "Glob",
+          "Grep",
+          "Edit",
+          "Write",
+          "--permission-mode",
+          "acceptEdits",
+          "--model",
+          args.model,
+          "--output-format",
+          "json",
+        ], args.dir);
+        const durationMs = Date.now() - started;
+        if (cl.missing) throw new Error("claude CLI not installed");
+
+        let numTurns = 0;
+        let costUsd = 0;
+        let claudeOk = cl.ok;
+        try {
+          const res = JSON.parse(cl.stdout);
+          numTurns = res.num_turns ?? 0;
+          costUsd = res.total_cost_usd ?? 0;
+          claudeOk = claudeOk && !res.is_error;
+        } catch {
+          claudeOk = false;
+        }
+
+        const srcinfo = await run("makepkg", ["--printsrcinfo"], args.dir);
+        const passed = claudeOk && srcinfo.ok;
+        context.logger.info("fix {name} attempt {attempt}: passed={passed}", {
+          name: args.name,
+          attempt: args.attempt,
+          passed,
+        });
+
+        const logHandle = await context.createFileWriter("log", `fixlog-${args.name}-attempt${args.attempt}`)
+          .writeText(`# task prompt\n${task}\n\n# claude output (exit ${cl.code}, ${durationMs}ms)\n${cl.stdout}\n${cl.stderr}`);
+        const handle = await context.writeResource("fix", `fix-${args.name}-attempt${args.attempt}`, {
+          name: args.name,
+          dir: args.dir,
+          attempt: args.attempt,
+          model: args.model,
+          numTurns,
+          durationMs,
+          costUsd,
+          parseOk: srcinfo.ok,
+          passed,
+          timestamp: new Date().toISOString(),
+        });
+        return { dataHandles: [handle, logHandle] };
       },
     },
     checksums: {

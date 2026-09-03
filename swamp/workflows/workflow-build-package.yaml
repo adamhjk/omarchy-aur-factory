@@ -3,8 +3,16 @@ name: build-package
 description: >-
   Deterministic build pipeline for an authored PKGBUILD: update checksums
   (updpkgsums + .SRCINFO), build with makepkg (full log + PKGBUILD/.SRCINFO
-  snapshots as evidence), then run the vet-package workflow (lint + audit).
-  Every stage writes evidence keyed <stage>-<name>-<version>.
+  snapshots as evidence), then lint the PKGBUILD and audit the built package.
+  If the audit fails, a constrained Claude call patches the PKGBUILD using
+  the audit (and lint) findings and the checksums/installdeps/build/lint/audit
+  chain re-runs automatically — up to 3 build attempts total before giving
+  up. Every stage writes evidence keyed <stage>-<name>-<version>; fix
+  attempts are keyed fix-<name>-<version>-attempt<n>. Lint/audit run as
+  direct steps here (not via the vet-package workflow) so each attempt's
+  fresh results are immediately visible to this workflow's own guards and
+  asserts — nested `type: workflow` calls don't invalidate the parent's
+  data.latest() cache.
 tags:
   factory: arch-packaging
 inputs:
@@ -25,7 +33,9 @@ inputs:
     - version
 jobs:
   - name: build
-    description: Checksums, build, then vet
+    description: >-
+      Checksums, build, lint, audit — retried up to 3 total attempts when
+      the audit fails, patching the PKGBUILD via Claude between attempts
     steps:
       - name: checksums
         description: updpkgsums + regenerate .SRCINFO
@@ -96,19 +106,306 @@ jobs:
           - step: build
             condition:
               type: succeeded
-      - name: vet
-        description: Lint the PKGBUILD and audit the built package
+      - name: lint-1
+        description: "Attempt 1/3: statically lint the PKGBUILD"
         task:
-          type: workflow
-          workflowIdOrName: vet-package
+          type: model_method
+          modelIdOrName: packager
+          methodName: lint
           inputs:
             dir: ${{ inputs.dir }}
-            name: ${{ inputs.name }}
-            version: ${{ inputs.version }}
+            name: ${{ inputs.name + "-" + inputs.version }}
         dependsOn:
           - step: assert-build-passed
             condition:
               type: succeeded
+      - name: audit-1
+        description: "Attempt 1/3: audit the built package"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: audit
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: lint-1
+            condition:
+              type: succeeded
+
+      # --- Audit-retry loop: only runs when the most recent audit failed.
+      # Each round patches the PKGBUILD with Claude, then redoes the full
+      # checksums/installdeps/build/lint/audit chain. Capped at 3 total
+      # attempts. fix-N is guard-skipped once an attempt's audit passes;
+      # everything after it in that round cascade-skips via normal
+      # `succeeded` dependencies (no repeated guard needed).
+
+      - name: fix-1
+        description: "If attempt 1's audit failed: ask Claude to patch the PKGBUILD from the audit/lint findings"
+        guard: >-
+          ${{ data.latest("packager", "audit-" + inputs.name + "-" + inputs.version).?attributes.?passed.orValue(true) == true }}
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: fix
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+            attempt: 1
+        dependsOn:
+          - step: audit-1
+            condition:
+              type: succeeded
+      - name: checksums-2
+        description: "Attempt 2/3: updpkgsums + regenerate .SRCINFO after the fix"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: checksums
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: fix-1
+            condition:
+              type: succeeded
+      - name: assert-checksums-2-passed
+        task:
+          type: assert
+          expr: data.latest("packager", "checksums-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: updpkgsums or .SRCINFO regeneration failed on the post-fix rebuild (attempt 2) — inspect checksums evidence and checksumslog
+          severity: high
+        dependsOn:
+          - step: checksums-2
+            condition:
+              type: succeeded
+      - name: installdeps-2
+        description: "Attempt 2/3: reinstall deps into the isolated build root (the fix may have added a dependency)"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: installdeps
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-checksums-2-passed
+            condition:
+              type: succeeded
+      - name: assert-installdeps-2-passed
+        task:
+          type: assert
+          expr: data.latest("packager", "installdeps-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: Dependency installation failed on the post-fix rebuild (attempt 2) — inspect installdeps evidence and installdepslog
+          severity: high
+        dependsOn:
+          - step: installdeps-2
+            condition:
+              type: succeeded
+      - name: build-2
+        description: "Attempt 2/3: rebuild with the patched PKGBUILD"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: build
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-installdeps-2-passed
+            condition:
+              type: succeeded
+      - name: assert-build-2-passed
+        task:
+          type: assert
+          expr: data.latest("packager", "build-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: makepkg build failed on the post-fix rebuild (attempt 2) — inspect build evidence and buildlog
+          severity: high
+        dependsOn:
+          - step: build-2
+            condition:
+              type: succeeded
+      - name: lint-2
+        description: "Attempt 2/3: re-lint the patched PKGBUILD"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: lint
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-build-2-passed
+            condition:
+              type: succeeded
+      - name: audit-2
+        description: "Attempt 2/3: re-audit the rebuilt package"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: audit
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: lint-2
+            condition:
+              type: succeeded
+
+      - name: fix-2
+        description: "If attempt 2's audit failed: ask Claude to patch the PKGBUILD again from the latest audit/lint findings"
+        guard: >-
+          ${{ data.latest("packager", "audit-" + inputs.name + "-" + inputs.version).?attributes.?passed.orValue(true) == true }}
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: fix
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+            attempt: 2
+        dependsOn:
+          - step: audit-2
+            condition:
+              type: succeeded
+      - name: checksums-3
+        description: "Attempt 3/3 (final): updpkgsums + regenerate .SRCINFO after the second fix"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: checksums
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: fix-2
+            condition:
+              type: succeeded
+      - name: assert-checksums-3-passed
+        task:
+          type: assert
+          expr: data.latest("packager", "checksums-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: updpkgsums or .SRCINFO regeneration failed on the post-fix rebuild (attempt 3) — inspect checksums evidence and checksumslog
+          severity: high
+        dependsOn:
+          - step: checksums-3
+            condition:
+              type: succeeded
+      - name: installdeps-3
+        description: "Attempt 3/3 (final): reinstall deps into the isolated build root"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: installdeps
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-checksums-3-passed
+            condition:
+              type: succeeded
+      - name: assert-installdeps-3-passed
+        task:
+          type: assert
+          expr: data.latest("packager", "installdeps-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: Dependency installation failed on the post-fix rebuild (attempt 3) — inspect installdeps evidence and installdepslog
+          severity: high
+        dependsOn:
+          - step: installdeps-3
+            condition:
+              type: succeeded
+      - name: build-3
+        description: "Attempt 3/3 (final): rebuild with the twice-patched PKGBUILD"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: build
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-installdeps-3-passed
+            condition:
+              type: succeeded
+      - name: assert-build-3-passed
+        task:
+          type: assert
+          expr: data.latest("packager", "build-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: makepkg build failed on the post-fix rebuild (attempt 3) — inspect build evidence and buildlog
+          severity: high
+        dependsOn:
+          - step: build-3
+            condition:
+              type: succeeded
+      - name: lint-3
+        description: "Attempt 3/3 (final): re-lint the twice-patched PKGBUILD"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: lint
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: assert-build-3-passed
+            condition:
+              type: succeeded
+      - name: audit-3
+        description: "Attempt 3/3 (final): re-audit the rebuilt package — no more retries after this"
+        task:
+          type: model_method
+          modelIdOrName: packager
+          methodName: audit
+          inputs:
+            dir: ${{ inputs.dir }}
+            name: ${{ inputs.name + "-" + inputs.version }}
+        dependsOn:
+          - step: lint-3
+            condition:
+              type: succeeded
+
+      # --- Final gate: whichever attempt ran last, its lint/audit evidence
+      # must both show passed for the package to be considered built.
+      # Depends on all three lint/audit pairs with "always" since later
+      # ones are skipped (cascading from fix-N being guard-skipped) once an
+      # earlier attempt already passed.
+
+      - name: assert-lint-passed-final
+        description: Fail if the PKGBUILD lint on the final attempt found hard failures
+        task:
+          type: assert
+          expr: data.latest("packager", "lint-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: >-
+            PKGBUILD lint failed and was not resolved within 3 build attempts — inspect lint evidence and lintlog
+          severity: high
+        dependsOn:
+          - step: lint-1
+            condition:
+              type: always
+          - step: lint-2
+            condition:
+              type: always
+          - step: lint-3
+            condition:
+              type: always
+      - name: assert-audit-passed-final
+        description: Fail if the package audit still failed after 3 build attempts
+        task:
+          type: assert
+          expr: data.latest("packager", "audit-" + inputs.name + "-" + inputs.version).attributes.passed == true
+          message: >-
+            Package audit failed and was not resolved within 3 build attempts (initial + 2 auto-fix retries) — inspect audit evidence, auditlog, and the fix-<name>-attempt* evidence for what Claude tried
+          severity: high
+        dependsOn:
+          - step: audit-1
+            condition:
+              type: always
+          - step: audit-2
+            condition:
+              type: always
+          - step: audit-3
+            condition:
+              type: always
       - name: mark-built
         description: >-
           Record the successful build on the package request (approved →
@@ -123,7 +420,10 @@ jobs:
             pkgname: ${{ inputs.name }}
             version: ${{ inputs.version }}
         dependsOn:
-          - step: vet
+          - step: assert-lint-passed-final
+            condition:
+              type: succeeded
+          - step: assert-audit-passed-final
             condition:
               type: succeeded
     dependsOn: []
@@ -147,4 +447,4 @@ jobs:
 reports:
   require:
     - "@omarchy/package-dossier"
-version: 1
+version: 3
