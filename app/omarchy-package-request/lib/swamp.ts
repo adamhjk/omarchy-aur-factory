@@ -84,7 +84,12 @@ export class SwampCliError extends Error {
 
 interface ExecFileError {
   message?: string
+  killed?: boolean
+  signal?: string | null
 }
+
+/** Hard cap on any single swamp CLI invocation, so a stuck call can never hang an API route forever. */
+const SWAMP_CLI_TIMEOUT_MS = 20_000
 
 /** Runs `swamp <args>` and returns raw stdout, or throws a SwampCliError. */
 function runSwamp(args: string[]): Promise<string> {
@@ -92,7 +97,12 @@ function runSwamp(args: string[]): Promise<string> {
     execFile(
       SWAMP_BIN,
       args,
-      { cwd: SWAMP_DIR, maxBuffer: 10 * 1024 * 1024 },
+      {
+        cwd: SWAMP_DIR,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: SWAMP_CLI_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+      },
       (error, stdout, stderr) => {
         if (error) {
           reject(parseCliError(stderr, error as ExecFileError))
@@ -104,8 +114,17 @@ function runSwamp(args: string[]): Promise<string> {
   })
 }
 
+/** True when the execFile error is Node killing the process because it hit our `timeout` option. */
+function isTimeoutError(error: ExecFileError): boolean {
+  return error.killed === true && error.signal === "SIGKILL"
+}
+
 /** Parses swamp's `--json` stderr error envelope: {"error": "...", "code": "..."}. */
 function parseCliError(stderr: string, fallback: ExecFileError): SwampCliError {
+  if (isTimeoutError(fallback)) {
+    return new SwampCliError("swamp CLI call timed out")
+  }
+
   const text = (stderr ?? "").trim()
   if (text) {
     try {
@@ -496,10 +515,10 @@ export async function getBuildStatus(pkgname: string): Promise<BuildStatus> {
 // -- Build report (GET /api/requests/[pkgname]/report) --------------------
 
 /**
- * Where a BuildReport came from: the full dossier report ('report' -- either
- * still current or recovered from an older workflow-run version), the
- * permanent stage evidence used as a fallback once the dossier has aged out
- * of retention ('evidence'), or nothing found at all (null).
+ * Where a BuildReport came from: the durable per-package dossier or the
+ * current @omarchy/package-dossier report ('report'), the permanent stage
+ * evidence used as a fallback once neither is available ('evidence'), or
+ * nothing found at all (null).
  */
 export type BuildReportSource = "report" | "evidence" | null
 
@@ -527,101 +546,14 @@ export interface BuildReport {
   evidence: BuildReportEvidence | null
 }
 
-/** How many versions back of the dossier report to search once the newest one belongs to another package. */
-const DOSSIER_VERSION_LOOKBACK = 5
-
 /** True when a SwampCliError is the "no such version/data" case that we should skip over, not fail on. */
 function isDataNotFoundError(error: unknown): boolean {
   return error instanceof SwampCliError && /data not found/i.test(error.message)
 }
 
-/** The dossier JSON's `content` field, whether swamp handed it back as an object or a JSON string. */
-function parseDossierContent(content: unknown): PackageDossierJson | null {
-  if (content && typeof content === "object") {
-    return content as PackageDossierJson
-  }
-  if (typeof content === "string" && content.trim()) {
-    try {
-      return JSON.parse(content) as PackageDossierJson
-    } catch {
-      return null
-    }
-  }
-  return null
-}
-
 interface RawDataGetResult {
   version?: number
   content?: unknown
-}
-
-/** Fetches the dossier JSON's raw `data get` row at a specific report version, tolerating "not found". */
-async function getDossierJsonRow(version?: number): Promise<RawDataGetResult | null> {
-  const args = [
-    "data",
-    "get",
-    "--workflow",
-    "create-package",
-    "report-omarchy-package-dossier-json",
-  ]
-  if (version !== undefined) {
-    args.push("--version", String(version))
-  }
-  try {
-    return (await runSwampJson(args)) as RawDataGetResult | null
-  } catch (error) {
-    if (isDataNotFoundError(error)) return null
-    throw error
-  }
-}
-
-/** Fetches the dossier markdown's raw `data get` row at a specific report version, tolerating "not found". */
-async function getDossierMarkdownRow(version: number): Promise<string | null> {
-  try {
-    const result = (await runSwampJson([
-      "data",
-      "get",
-      "--workflow",
-      "create-package",
-      "report-omarchy-package-dossier",
-      "--version",
-      String(version),
-    ])) as RawDataGetResult | null
-    return typeof result?.content === "string" ? result.content.trim() : null
-  } catch (error) {
-    if (isDataNotFoundError(error)) return null
-    throw error
-  }
-}
-
-/**
- * Walks the @omarchy/package-dossier report's version history looking for
- * this package's dossier: the "current" (latest) one belongs to whichever
- * package built most recently, so once that's a mismatch we have to search
- * backwards through up to DOSSIER_VERSION_LOOKBACK older versions -- each of
- * which was the "current" dossier at some earlier point -- for one whose
- * pkgname matches. Reports age out (30-day/5-version retention), so missing
- * versions are expected and simply skipped.
- */
-async function walkDossierVersions(
-  pkgname: string
-): Promise<{ json: PackageDossierJson; markdown: string } | null> {
-  const latestRow = await getDossierJsonRow()
-  const latestVersion = latestRow?.version
-  if (typeof latestVersion !== "number") return null
-
-  const floor = Math.max(latestVersion - DOSSIER_VERSION_LOOKBACK, 1)
-  for (let version = latestVersion - 1; version >= floor; version--) {
-    const row = await getDossierJsonRow(version)
-    const json = parseDossierContent(row?.content)
-    if (!json || json.pkgname !== pkgname) continue
-
-    const markdown = await getDossierMarkdownRow(version)
-    if (markdown === null) continue
-
-    return { json, markdown }
-  }
-  return null
 }
 
 /** Reads one packager evidence field (e.g. `lint-entr-5.8-1`), tolerating "not found". */
@@ -757,7 +689,9 @@ export async function getDurableDossier(pkgname: string, version: string): Promi
 /**
  * Fallback for once the dossier report itself has aged out of retention:
  * reassembles a summary from the permanent lint/audit/build stage evidence
- * recorded on the packager model under `<pkgname>-<version>`.
+ * recorded on the packager model under `<pkgname>-<version>`. The three
+ * fields are independent, so they're fetched concurrently rather than
+ * sequentially.
  */
 async function getEvidenceFallback(pkgname: string, version: string): Promise<BuildReportEvidence> {
   const key = `${pkgname}-${version}`
@@ -767,22 +701,29 @@ async function getEvidenceFallback(pkgname: string, version: string): Promise<Bu
     warnCount: Number(content.warnCount ?? 0),
   })
 
-  const lint = await getEvidenceField(`lint-${key}`, pickCheckSummary)
-  const audit = await getEvidenceField(`audit-${key}`, pickCheckSummary)
-  const build = await getEvidenceField(`build-${key}`, (content) => ({
-    durationMs: Number(content.durationMs ?? 0),
-    artifacts: Array.isArray(content.artifacts) ? (content.artifacts as string[]) : [],
-  }))
+  const [lint, audit, build] = await Promise.all([
+    getEvidenceField(`lint-${key}`, pickCheckSummary),
+    getEvidenceField(`audit-${key}`, pickCheckSummary),
+    getEvidenceField(`build-${key}`, (content) => ({
+      durationMs: Number(content.durationMs ?? 0),
+      artifacts: Array.isArray(content.artifacts) ? (content.artifacts as string[]) : [],
+    })),
+  ])
 
   return { lint, audit, build }
 }
 
 /**
  * Build report for a package that has already built (status 'unstable' or
- * 'stable'): the full @omarchy/package-dossier report when it -- or an older
- * version of it -- still matches this pkgname, else a compact summary
- * reassembled from the permanent stage evidence once the report itself has
- * aged out of retention.
+ * 'stable'), once the durable per-package dossier (checked by the caller
+ * before this runs) came up empty: the current @omarchy/package-dossier
+ * report when it belongs to this pkgname -- true for a just-built package
+ * whose durable dossier write raced with this request -- else a compact
+ * summary reassembled from the permanent stage evidence.
+ *
+ * Durable dossiers exist for every build (success or failure) and never age
+ * out, so this is only ever the rare-race or truly-nothing-recorded path,
+ * not the common case.
  */
 export async function getBuildReport(pkgname: string, version: string): Promise<BuildReport> {
   try {
@@ -806,12 +747,7 @@ export async function getBuildReport(pkgname: string, version: string): Promise<
       return { source: "report", markdown: markdown.trim(), json: raw.json, evidence: null }
     }
   } catch {
-    // Fall through to the version walk / evidence fallback below.
-  }
-
-  const walked = await walkDossierVersions(pkgname)
-  if (walked) {
-    return { source: "report", markdown: walked.markdown, json: walked.json, evidence: null }
+    // Fall through to the evidence fallback below.
   }
 
   const evidence = await getEvidenceFallback(pkgname, version)

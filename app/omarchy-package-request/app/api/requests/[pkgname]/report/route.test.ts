@@ -71,7 +71,7 @@ describe("GET /api/requests/[pkgname]/report", () => {
     ])
   })
 
-  it("falls back to the existing report chain when no durable dossier is recorded", async () => {
+  it("falls back to the current-report-get / evidence chain when no durable dossier is recorded", async () => {
     mockExecFileOnce(
       JSON.stringify({ results: [{ content: { pkgname: "entr", version: "5.8-1" } }] })
     ) // getRequest
@@ -82,8 +82,7 @@ describe("GET /api/requests/[pkgname]/report", () => {
     ) // durable dossier miss
     mockExecFileOnce(
       JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
-    ) // @omarchy/package-dossier report get (mismatched pkgname)
-    mockExecFileOnce(JSON.stringify({ version: 1, content: { pkgname: "other" } })) // latest version row, nothing older
+    ) // @omarchy/package-dossier report get (mismatched pkgname -- another package built more recently)
     mockExecFileOnce(
       "",
       JSON.stringify({ error: 'Data not found: "lint-entr-5.8-1" for model "packager"' }),
@@ -105,6 +104,9 @@ describe("GET /api/requests/[pkgname]/report", () => {
 
     expect(response.status).toBe(200)
     expect(body).toEqual({ source: null, markdown: null, json: null, evidence: null })
+    // getRequest + durable miss + report get + lint/audit/build -- 6 calls,
+    // no version-walk in between.
+    expect(mockedExecFile).toHaveBeenCalledTimes(6)
   })
 
   it("skips the durable-dossier lookup entirely when no version can be resolved", async () => {
@@ -119,7 +121,6 @@ describe("GET /api/requests/[pkgname]/report", () => {
     mockExecFileOnce(
       JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
     ) // report get (mismatch, version "")
-    mockExecFileOnce(JSON.stringify({ version: 1, content: { pkgname: "other" } }))
     mockExecFileOnce(
       "",
       JSON.stringify({ error: 'Data not found: "lint-entr-" for model "packager"' }),
@@ -140,8 +141,26 @@ describe("GET /api/requests/[pkgname]/report", () => {
     const body = await response.json()
 
     expect(body.source).toBeNull()
-    // getRequest + author fallback + (report get + version row + lint/audit/build) --
+    // getRequest + author fallback + report get + lint/audit/build --
     // no dossier-entr-<version> lookup happens when no version resolves.
-    expect(mockedExecFile).toHaveBeenCalledTimes(7)
+    expect(mockedExecFile).toHaveBeenCalledTimes(6)
+  })
+
+  it("propagates a timed-out swamp CLI call as a 502 with a clear message", async () => {
+    mockedExecFile.mockImplementationOnce((..._args: unknown[]) => {
+      const callback = _args[_args.length - 1] as ExecFileCallback
+      const error = Object.assign(new Error("Command failed"), {
+        killed: true,
+        signal: "SIGKILL",
+      })
+      callback(error, "", "")
+      return {} as ReturnType<typeof execFile>
+    })
+
+    const response = await getReport("entr")
+    const body = await response.json()
+
+    expect(response.status).toBeGreaterThanOrEqual(500)
+    expect(body.error).toBe("swamp CLI call timed out")
   })
 })

@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
-import { buttonVariants } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,6 +14,9 @@ import { cn } from "@/lib/utils"
 import type { BuildReport } from "@/lib/swamp"
 
 import { PhaseEvidenceRow, REPORT_PHASES, STAGE_LABEL } from "./phase-evidence"
+
+/** Client-side cap on the build report fetch, so a stuck request can never leave the section loading forever. */
+const FETCH_TIMEOUT_MS = 30_000
 
 function CheckSummaryBadge({
   label,
@@ -48,13 +51,18 @@ function CheckSummaryBadge({
 export function BuildReportSection({ pkgname }: { pkgname: string }) {
   const [data, setData] = useState<BuildReport | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
     async function load() {
       try {
-        const res = await fetch(`/api/requests/${encodeURIComponent(pkgname)}/report`)
+        const res = await fetch(`/api/requests/${encodeURIComponent(pkgname)}/report`, {
+          signal: controller.signal,
+        })
         const body = await res.json().catch(() => null)
         if (cancelled) return
 
@@ -64,10 +72,14 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
         }
 
         setData(body as BuildReport)
+        setError(null)
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load build report")
+        if (cancelled) return
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setError("Timed out loading build report.")
+          return
         }
+        setError(err instanceof Error ? err.message : "Failed to load build report")
       }
     }
 
@@ -75,8 +87,16 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
 
     return () => {
       cancelled = true
+      clearTimeout(timeoutId)
+      controller.abort()
     }
-  }, [pkgname])
+  }, [pkgname, attempt])
+
+  const retry = useCallback(() => {
+    setError(null)
+    setData(null)
+    setAttempt((n) => n + 1)
+  }, [])
 
   return (
     <div className="flex flex-col gap-2 border-t pt-4">
@@ -84,46 +104,57 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
         Build report
       </span>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button variant="outline" size="xs" onClick={retry}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Phases have their own per-stage evidence endpoint — render them
+          immediately, independent of the report fetch. */}
+      <div className="flex flex-col gap-1">
+        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Phases
+        </span>
+        <ol className="flex flex-col gap-1 border-l pl-3">
+          {REPORT_PHASES.map((stage) => (
+            <li key={stage} className="text-sm">
+              <PhaseEvidenceRow
+                pkgname={pkgname}
+                stage={stage}
+                trigger={<span className="font-medium">{STAGE_LABEL[stage]}</span>}
+              />
+            </li>
+          ))}
+        </ol>
+      </div>
 
       {!error && !data && (
         <p className="text-sm text-muted-foreground">Loading build report…</p>
-      )}
-
-      {!error && data && (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Phases
-          </span>
-          <ol className="flex flex-col gap-1 border-l pl-3">
-            {REPORT_PHASES.map((stage) => (
-              <li key={stage} className="text-sm">
-                <PhaseEvidenceRow
-                  pkgname={pkgname}
-                  stage={stage}
-                  trigger={<span className="font-medium">{STAGE_LABEL[stage]}</span>}
-                />
-              </li>
-            ))}
-          </ol>
-        </div>
       )}
 
       {!error && data && data.source === null && (
         <p className="text-sm text-muted-foreground">No build report available.</p>
       )}
 
-      {!error && data?.source === "report" && data.json && (
+      {/* The durable-dossier path returns markdown with json: null — the
+          report must render whenever markdown exists; badges only need json. */}
+      {!error && data?.source === "report" && data.markdown && (
         <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(data.json.stages).map(([name, stage]) =>
-              stage ? (
-                <Badge key={name} variant={stage.passed ? "default" : "destructive"}>
-                  {name}: {stage.passed ? "pass" : "fail"}
-                </Badge>
-              ) : null
-            )}
-          </div>
+          {data.json && (
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(data.json.stages).map(([name, stage]) =>
+                stage ? (
+                  <Badge key={name} variant={stage.passed ? "default" : "destructive"}>
+                    {name}: {stage.passed ? "pass" : "fail"}
+                  </Badge>
+                ) : null
+              )}
+            </div>
+          )}
           <Collapsible>
             <CollapsibleTrigger
               className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-fit")}

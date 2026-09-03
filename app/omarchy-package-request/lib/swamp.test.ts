@@ -570,36 +570,8 @@ describe("getBuildReport", () => {
     "create-package",
     "--markdown",
   ]
-  const latestVersionArgs = [
-    "data",
-    "get",
-    "--workflow",
-    "create-package",
-    "report-omarchy-package-dossier-json",
-    "--json",
-  ]
-  const versionJsonArgs = (version: string) => [
-    "data",
-    "get",
-    "--workflow",
-    "create-package",
-    "report-omarchy-package-dossier-json",
-    "--version",
-    version,
-    "--json",
-  ]
-  const versionMarkdownArgs = (version: string) => [
-    "data",
-    "get",
-    "--workflow",
-    "create-package",
-    "report-omarchy-package-dossier",
-    "--version",
-    version,
-    "--json",
-  ]
 
-  it("returns the current dossier report when its pkgname matches", async () => {
+  it("returns the current dossier report when its pkgname matches (the just-built race case)", async () => {
     const dossierJson = {
       pkgname: "entr",
       workflowRunId: "run-1",
@@ -622,93 +594,10 @@ describe("getBuildReport", () => {
     expect(mockedExecFile.mock.calls[1][1]).toEqual(dossierMarkdownArgs)
   })
 
-  it("walks older dossier report versions when the latest belongs to another package", async () => {
+  it("falls straight to the evidence fallback, fetched in parallel, when the current report belongs to another package", async () => {
     mockExecFileOnce(
       JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
     )
-    mockExecFileOnce(
-      JSON.stringify({ version: 5, content: { pkgname: "other", stages: {}, notes: [] } })
-    )
-    mockExecFileOnce(JSON.stringify({ content: { pkgname: "other2", stages: {}, notes: [] } }))
-    const matchedJson = { pkgname: "entr", version: "5.8-1", stages: { build: { passed: true } }, notes: [] }
-    mockExecFileOnce(JSON.stringify({ content: matchedJson }))
-    mockExecFileOnce(JSON.stringify({ content: "# Package Dossier: entr (v3)" }))
-
-    const result = await getBuildReport("entr", "5.8-1")
-
-    expect(result).toEqual({
-      source: "report",
-      markdown: "# Package Dossier: entr (v3)",
-      json: matchedJson,
-      evidence: null,
-    })
-    expect(mockedExecFile).toHaveBeenCalledTimes(5)
-    // No markdown fetch happens for the mismatched "current" dossier.
-    expect(mockedExecFile.mock.calls[0][1]).toEqual(dossierJsonArgs)
-    expect(mockedExecFile.mock.calls[1][1]).toEqual(latestVersionArgs)
-    expect(mockedExecFile.mock.calls[2][1]).toEqual(versionJsonArgs("4"))
-    expect(mockedExecFile.mock.calls[3][1]).toEqual(versionJsonArgs("3"))
-    expect(mockedExecFile.mock.calls[4][1]).toEqual(versionMarkdownArgs("3"))
-  })
-
-  it("tolerates a 'Data not found' version while walking and keeps searching older ones", async () => {
-    mockExecFileOnce(
-      JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
-    )
-    mockExecFileOnce(
-      JSON.stringify({ version: 3, content: { pkgname: "other", stages: {}, notes: [] } })
-    )
-    mockExecFileOnce(
-      "",
-      JSON.stringify({
-        error:
-          'Data not found: "report-omarchy-package-dossier-json" in workflow "create-package" (version 2)',
-      }),
-      new Error("Command failed with exit code 1")
-    )
-    const matchedJson = { pkgname: "entr", stages: {}, notes: [] }
-    mockExecFileOnce(JSON.stringify({ content: matchedJson }))
-    mockExecFileOnce(JSON.stringify({ content: "# entr v1" }))
-
-    const result = await getBuildReport("entr", "5.8-1")
-
-    expect(result).toEqual({
-      source: "report",
-      markdown: "# entr v1",
-      json: matchedJson,
-      evidence: null,
-    })
-    expect(mockedExecFile).toHaveBeenCalledTimes(5)
-    expect(mockedExecFile.mock.calls[2][1]).toEqual(versionJsonArgs("2"))
-    expect(mockedExecFile.mock.calls[3][1]).toEqual(versionJsonArgs("1"))
-    expect(mockedExecFile.mock.calls[4][1]).toEqual(versionMarkdownArgs("1"))
-  })
-
-  it("parses dossier content whether swamp returns it as an object or a JSON-encoded string", async () => {
-    mockExecFileOnce(
-      JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
-    )
-    mockExecFileOnce(JSON.stringify({ version: 2, content: { pkgname: "other" } }))
-    const matchedJson = { pkgname: "entr", stages: {}, notes: [] }
-    // Version 1's row content arrives as a JSON-encoded string, not a parsed object.
-    mockExecFileOnce(JSON.stringify({ content: JSON.stringify(matchedJson) }))
-    mockExecFileOnce(JSON.stringify({ content: "# entr v1" }))
-
-    const result = await getBuildReport("entr", "5.8-1")
-
-    expect(result.source).toBe("report")
-    expect(result.json).toEqual(matchedJson)
-    expect(result.markdown).toBe("# entr v1")
-    expect(mockedExecFile).toHaveBeenCalledTimes(4)
-  })
-
-  it("falls back to permanent stage evidence when no dossier version matches", async () => {
-    mockExecFileOnce(
-      JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
-    )
-    // Latest report version is 1, so the lookback window (0 down to 1) is empty --
-    // no older versions exist to search.
-    mockExecFileOnce(JSON.stringify({ version: 1, content: { pkgname: "other" } }))
     mockExecFileOnce(JSON.stringify({ content: { passed: true, failCount: 0, warnCount: 1 } }))
     mockExecFileOnce(JSON.stringify({ content: { passed: false, failCount: 2, warnCount: 0 } }))
     mockExecFileOnce(
@@ -729,17 +618,64 @@ describe("getBuildReport", () => {
         build: { durationMs: 4321, artifacts: ["entr-5.8-1-x86_64.pkg.tar.zst"] },
       },
     })
-    expect(mockedExecFile).toHaveBeenCalledTimes(5)
-    expect(mockedExecFile.mock.calls[2][1]).toEqual(["data", "get", "packager", "lint-entr-5.8-1", "--json"])
-    expect(mockedExecFile.mock.calls[3][1]).toEqual(["data", "get", "packager", "audit-entr-5.8-1", "--json"])
-    expect(mockedExecFile.mock.calls[4][1]).toEqual(["data", "get", "packager", "build-entr-5.8-1", "--json"])
+    // No version-walk calls: just the mismatched report lookup, then the
+    // three evidence gets -- worst case is 4 calls, well within budget.
+    expect(mockedExecFile).toHaveBeenCalledTimes(4)
+    expect(mockedExecFile.mock.calls[0][1]).toEqual(dossierJsonArgs)
+    const evidenceCalls = mockedExecFile.mock.calls.slice(1).map((call) => call[1])
+    expect(evidenceCalls).toContainEqual(["data", "get", "packager", "lint-entr-5.8-1", "--json"])
+    expect(evidenceCalls).toContainEqual(["data", "get", "packager", "audit-entr-5.8-1", "--json"])
+    expect(evidenceCalls).toContainEqual(["data", "get", "packager", "build-entr-5.8-1", "--json"])
   })
 
-  it("returns source null when neither a dossier nor any evidence is found", async () => {
+  it("fetches lint/audit/build evidence concurrently: all three calls are issued before any resolves", async () => {
     mockExecFileOnce(
       JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
     )
-    mockExecFileOnce(JSON.stringify({ version: 1, content: { pkgname: "other" } }))
+    // None of the three evidence calls resolve their callback when invoked --
+    // each just parks it in pendingCallbacks. A sequential (await lint, then
+    // await audit, then await build) implementation would stall forever
+    // after the first call, since nothing ever resolves it, so pendingCallbacks
+    // would never grow past 1. Reaching 3 proves all three were issued
+    // together via Promise.all.
+    const pendingCallbacks: ExecFileCallback[] = []
+    mockedExecFile
+      .mockImplementationOnce((..._args: unknown[]) => {
+        pendingCallbacks.push(_args[_args.length - 1] as ExecFileCallback)
+        return {} as ReturnType<typeof execFile>
+      })
+      .mockImplementationOnce((..._args: unknown[]) => {
+        pendingCallbacks.push(_args[_args.length - 1] as ExecFileCallback)
+        return {} as ReturnType<typeof execFile>
+      })
+      .mockImplementationOnce((..._args: unknown[]) => {
+        pendingCallbacks.push(_args[_args.length - 1] as ExecFileCallback)
+        return {} as ReturnType<typeof execFile>
+      })
+
+    const resultPromise = getBuildReport("entr", "5.8-1")
+
+    // Flush microtasks (the report-get call itself resolves a tick late)
+    // until all three evidence calls have been issued.
+    for (let i = 0; i < 10 && pendingCallbacks.length < 3; i++) {
+      await Promise.resolve()
+    }
+    expect(pendingCallbacks).toHaveLength(3)
+
+    pendingCallbacks[0](null, JSON.stringify({ content: { passed: true } }), "")
+    pendingCallbacks[1](null, JSON.stringify({ content: { passed: false } }), "")
+    pendingCallbacks[2](null, JSON.stringify({ content: { durationMs: 1, artifacts: [] } }), "")
+
+    const result = await resultPromise
+
+    expect(result.source).toBe("evidence")
+    expect(mockedExecFile).toHaveBeenCalledTimes(4)
+  })
+
+  it("returns source null when neither the current report nor any evidence is found", async () => {
+    mockExecFileOnce(
+      JSON.stringify({ json: { pkgname: "other", workflowRunId: "run-x", stages: {}, notes: [] } })
+    )
     mockExecFileOnce(
       "",
       JSON.stringify({ error: 'Data not found: "lint-entr-5.8-1" for model "packager"' }),
@@ -759,6 +695,59 @@ describe("getBuildReport", () => {
     const result = await getBuildReport("entr", "5.8-1")
 
     expect(result).toEqual({ source: null, markdown: null, json: null, evidence: null })
+  })
+})
+
+describe("swamp CLI timeout handling", () => {
+  it("surfaces a stuck swamp call (killed by the timeout option) as a clear SwampCliError", async () => {
+    mockedExecFile.mockImplementationOnce((..._args: unknown[]) => {
+      const callback = _args[_args.length - 1] as (
+        error: (Error & { killed?: boolean; signal?: string | null }) | null,
+        stdout: string,
+        stderr: string
+      ) => void
+      const error = Object.assign(new Error("Command failed"), {
+        killed: true,
+        signal: "SIGKILL",
+      })
+      callback(error, "", "")
+      return {} as ReturnType<typeof execFile>
+    })
+
+    await expect(queryRequests()).rejects.toMatchObject({
+      name: "SwampCliError",
+      message: "swamp CLI call timed out",
+    })
+  })
+
+  it("passes timeout and killSignal to execFile so a stuck call can never hang forever", async () => {
+    mockExecFileOnce(JSON.stringify({ results: [] }))
+
+    await queryRequests()
+
+    const [, , options] = mockedExecFile.mock.calls[0]
+    expect(options).toMatchObject({ timeout: 20_000, killSignal: "SIGKILL" })
+  })
+
+  it("does not misreport an ordinary non-zero exit as a timeout", async () => {
+    mockExecFileOnce(
+      "",
+      JSON.stringify({ error: "Request for 'foo' already exists", code: "method_execution_failed" }),
+      Object.assign(new Error("Command failed with exit code 1"), { killed: false, signal: null })
+    )
+
+    await expect(
+      submitRequest({
+        pkgname: "foo",
+        url: "https://example.com",
+        description: "d",
+        license: "MIT",
+        submitter: "adam",
+      })
+    ).rejects.toMatchObject({
+      name: "SwampCliError",
+      message: "Request for 'foo' already exists",
+    })
   })
 })
 
