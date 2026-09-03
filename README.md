@@ -31,17 +31,18 @@ Then run the setup script:
 ./setup.sh
 ```
 
-This will make sure your machine has an isolated build rootfs, install the deps for the web app, and makes sure all the prerequisites are installed.
+This will make sure your machine has an isolated build rootfs,
+install the deps for the web app, and makes sure all the
+prerequisites are installed.
 
-Setup is idempotent (it runs the `@omarchy/factory-setup` converge model): it
+Setup is idempotent, so you can run it again if you need: it
 bootstraps the isolated build rootfs (user namespaces — no sudo, no containers
 to install), installs the web app's dependencies, and probes every prerequisite
 with real operations. Anything it cannot fix without privileges (base-devel,
 pacman-contrib, nodejs/npm, the claude CLI, a missing /etc/subuid entry) is
 reported as `missing` with the exact remediation command. Re-run until it
 reports `passed` with nothing missing; `./setup.sh --deep` additionally builds
-and vets the generated seed package end-to-end. Evidence:
-`swamp data get setup setup` (from the `swamp/` directory).
+and vets the generated seed package end-to-end.
 
 Then start the web UI:
 
@@ -49,7 +50,7 @@ Then start the web UI:
 ./run.sh
 ```
 
-and open http://localhost:3000. To reach it from elsewhere on a network you
+Open http://localhost:3000. To reach it from elsewhere on a network you
 trust: `HOST=0.0.0.0 ./run.sh`.
 
 # Example inputs
