@@ -75,3 +75,69 @@ claude CLI, a missing /etc/subuid entry) is reported as `missing` with the
 exact remediation command. Re-run until it reports `passed` with nothing
 missing; `--input deep=true` additionally builds and vets the seed package
 end-to-end. Evidence: `swamp data get setup setup`.
+
+# Example inputs
+
+## Package requests (via the web app's Submit tab, or the CLI)
+
+Known-good starters, each proven through this factory:
+
+| pkgname | url | description | license |
+|---|---|---|---|
+| figlet | https://github.com/cmatsuoka/figlet/archive/refs/tags/2.2.5.tar.gz | Program for making large letters out of ordinary text | BSD-3-Clause |
+| entr | https://github.com/eradman/entr/archive/refs/tags/5.8.tar.gz | Run arbitrary commands when files change | ISC |
+| shellharden | https://github.com/anordal/shellharden/archive/refs/tags/v4.3.2.tar.gz | Shell script hardening tool (Rust) | MPL-2.0 |
+| htop | https://github.com/htop-dev/htop/archive/refs/tags/3.5.3.tar.gz | Interactive process viewer | GPL-2.0-only |
+
+Full pipeline from the CLI (what the app's approve button runs):
+
+```
+swamp workflow run create-package \
+  --input pkgname=figlet \
+  --input url=https://github.com/cmatsuoka/figlet/archive/refs/tags/2.2.5.tar.gz \
+  --input "description=Program for making large letters out of ordinary text" \
+  --input license=BSD-3-Clause \
+  --input dir=$PWD/../test-packages/figlet \
+  --input workdir=/tmp/omarchy-factory-scratch/figlet
+```
+
+Rebuild/vet an existing PKGBUILD:
+
+```
+swamp workflow run build-package \
+  --input dir=$PWD/../test-packages/figlet --input name=figlet --input version=2.2.5-1
+```
+
+## Retry a failed build with maintainer hints
+
+Add `--input "hints=..."` to a `create-package` run (the app's Retry button does
+this). Real hints that worked, in escalating precision:
+
+- "check() fails: the http networking test simulates connection resets and is
+  unreliable under makepkg — exclude that one test file, keep the rest of check()."
+- "Root cause confirmed: the test stub hardcodes /usr/bin/deno as a path that
+  must not exist; patch it to /nonexistent/deno in prepare() and note the
+  upstream bug."
+
+## App work requests (software factory)
+
+```
+swamp workflow run update-app \
+  --input appDir=$PWD/../app/omarchy-package-request \
+  --input name=wi-010-example \
+  --input "request=Add a package-count Badge to each tab label (e.g. 'Approval queue (3)'), derived from the already-fetched request list. No API changes. npm run test, typecheck and build must pass."
+```
+
+Be specific: name endpoints, data shapes, and the tests that must pass.
+
+# Costs & cautions
+
+- The judgment stages call Claude and cost real money: roughly $0.60 to author a
+  package, $1-4 per app work item, cents per review round. Deterministic stages
+  are free.
+- Arch Linux only (makepkg/pacman are load-bearing). You need a swamp-club
+  account (`swamp auth login`) and an authenticated `claude` CLI.
+- PKGBUILDs are model-authored: read the dossier before you promote — that is
+  what the maintainer/user promotion gates are for.
+- The web app has no authentication and its API executes swamp commands: bind it
+  to localhost or a trusted tailnet only.
