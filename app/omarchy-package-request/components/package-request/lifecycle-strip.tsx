@@ -69,7 +69,10 @@ export function LifecycleStrip({
   const currentIndex = STAGES.findIndex((stage) => stage.key === currentKey)
 
   return (
-    <div className="flex items-center" aria-label={`Lifecycle stage: ${currentKey}`}>
+    <div
+      className="flex flex-wrap items-center gap-y-1"
+      aria-label={`Lifecycle stage: ${currentKey}`}
+    >
       {STAGES.map((stage, index) => {
         const isCurrent = index === currentIndex
         const isPast = currentIndex >= 0 && index < currentIndex
@@ -85,7 +88,7 @@ export function LifecycleStrip({
             )}
             <div
               className={cn(
-                "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap",
+                "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] whitespace-nowrap sm:px-2",
                 isCurrent &&
                   "border-primary bg-primary font-medium text-primary-foreground",
                 isPast && "border-primary/40 bg-primary/10 text-foreground",
@@ -95,7 +98,10 @@ export function LifecycleStrip({
               {isCurrent && stage.key === "building" && (
                 <Loader2Icon className="size-3 animate-spin" />
               )}
-              {stage.label}
+              <span className="sr-only sm:not-sr-only">{stage.label}</span>
+              <span className="sm:hidden" aria-hidden="true">
+                {stage.label.charAt(0)}
+              </span>
             </div>
           </div>
         )

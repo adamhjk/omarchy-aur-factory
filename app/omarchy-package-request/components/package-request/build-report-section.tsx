@@ -9,6 +9,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Markdown } from "@/components/markdown"
 import { cn } from "@/lib/utils"
 import type { BuildReport } from "@/lib/swamp"
 
@@ -130,9 +131,9 @@ export function BuildReportSection({ pkgname }: { pkgname: string }) {
               Full dossier
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <pre className="mt-2 max-h-96 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
-                {data.markdown}
-              </pre>
+              <div className="mt-2 max-h-96 overflow-auto rounded-md border p-3">
+                {data.markdown && <Markdown>{data.markdown}</Markdown>}
+              </div>
             </CollapsibleContent>
           </Collapsible>
         </div>

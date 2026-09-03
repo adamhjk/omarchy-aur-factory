@@ -15,6 +15,7 @@ import {
 import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
+import { Markdown } from "@/components/markdown"
 import { cn } from "@/lib/utils"
 import type { BuildStatus } from "@/lib/swamp"
 
@@ -234,9 +235,9 @@ export function BuildSection({ pkgname }: { pkgname: string }) {
                   Full dossier
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="mt-2 max-h-96 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
-                    {data.dossier.markdown}
-                  </pre>
+                  <div className="mt-2 max-h-96 overflow-auto rounded-md border p-3">
+                    <Markdown>{data.dossier.markdown}</Markdown>
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             </div>

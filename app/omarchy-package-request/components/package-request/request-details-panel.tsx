@@ -36,6 +36,9 @@ export function RequestDetailsPanel({ request }: { request: PackageRequest }) {
   return (
     <div className="flex flex-col gap-4 px-4 py-4 text-sm">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="sm:col-span-2 lg:col-span-3">
+          <DetailField label="Description">{request.description}</DetailField>
+        </div>
         <DetailField label="Source URL">
           <a
             href={request.url}
@@ -59,7 +62,9 @@ export function RequestDetailsPanel({ request }: { request: PackageRequest }) {
         )}
       </div>
 
-      {request.status === "approved" && <BuildSection pkgname={request.pkgname} />}
+      {request.status === "approved" && (
+        <BuildSection pkgname={request.pkgname} />
+      )}
 
       {(request.status === "unstable" || request.status === "stable") && (
         <BuildReportSection pkgname={request.pkgname} />
@@ -109,7 +114,12 @@ export function RequestDetailsPanel({ request }: { request: PackageRequest }) {
                     {isPromoted && (
                       <SparklesIcon className="size-3.5 shrink-0 self-center text-primary" />
                     )}
-                    <span className={cn("font-medium", isPromoted && "text-primary")}>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        isPromoted && "text-primary"
+                      )}
+                    >
                       {isPromoted ? "Promoted to stable" : entry.event}
                     </span>
                     <span className="text-xs text-muted-foreground">
@@ -122,7 +132,9 @@ export function RequestDetailsPanel({ request }: { request: PackageRequest }) {
                     )}
                   </div>
                   {entry.detail && (
-                    <p className="text-xs text-muted-foreground">{entry.detail}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.detail}
+                    </p>
                   )}
                 </li>
               )

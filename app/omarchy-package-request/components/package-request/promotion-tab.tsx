@@ -118,12 +118,9 @@ export function PromotionTab({
             </p>
           )}
           {unstable.map((item) => (
-            <Collapsible
-              key={item.pkgname}
-              className="rounded-lg border"
-            >
+            <Collapsible key={item.pkgname} className="rounded-lg border">
               <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-2">
+                <div className="flex min-w-0 flex-1 items-start gap-2">
                   <CollapsibleTrigger
                     className={cn(
                       buttonVariants({ variant: "ghost", size: "icon" }),
@@ -133,15 +130,21 @@ export function PromotionTab({
                   >
                     <ChevronRightIcon className="size-4 shrink-0" />
                   </CollapsibleTrigger>
-                  <div className="flex flex-col gap-1.5">
-                    <p className="font-medium">{item.pkgname}</p>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <p className="truncate font-medium">{item.pkgname}</p>
+                    <p
+                      className="truncate text-sm text-muted-foreground"
+                      title={item.description}
+                    >
                       {item.description}
                     </p>
-                    <LifecycleStrip pkgname={item.pkgname} status={item.status} />
+                    <LifecycleStrip
+                      pkgname={item.pkgname}
+                      status={item.status}
+                    />
                   </div>
                 </div>
-                <div className="w-full sm:w-72">
+                <div className="w-full sm:w-72 sm:shrink-0">
                   <PromotionSlots
                     pkgname={item.pkgname}
                     maintainer={item.promotionMaintainer}
@@ -171,8 +174,8 @@ export function PromotionTab({
           <CardContent className="flex flex-col gap-2">
             {stable.map((item) => (
               <Collapsible key={item.pkgname} className="rounded-lg border">
-                <div className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <CollapsibleTrigger
                       className={cn(
                         buttonVariants({ variant: "ghost", size: "icon" }),
@@ -182,16 +185,23 @@ export function PromotionTab({
                     >
                       <ChevronRightIcon className="size-4 shrink-0" />
                     </CollapsibleTrigger>
-                    <span className="font-medium">{item.pkgname}</span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                    <span className="truncate font-medium">{item.pkgname}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                       <SparklesIcon className="size-3" />
                       Promoted
                     </span>
-                    <LifecycleStrip pkgname={item.pkgname} status={item.status} />
+                    <LifecycleStrip
+                      pkgname={item.pkgname}
+                      status={item.status}
+                    />
                   </div>
-                  <div className="flex gap-4 text-sm text-muted-foreground">
-                    <span>Maintainer: {item.promotionMaintainer?.by}</span>
-                    <span>User: {item.promotionUser?.by}</span>
+                  <div className="flex flex-col gap-1 text-sm text-muted-foreground sm:shrink-0 sm:flex-row sm:flex-wrap sm:gap-4">
+                    <span className="truncate">
+                      Maintainer: {item.promotionMaintainer?.by}
+                    </span>
+                    <span className="truncate">
+                      User: {item.promotionUser?.by}
+                    </span>
                   </div>
                 </div>
                 <CollapsibleContent className="border-t bg-muted/30">

@@ -1,10 +1,10 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { useState } from "react"
 
 import { ChevronRightIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -12,16 +12,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { toast } from "@/components/ui/toast"
+import { cn } from "@/lib/utils"
 import type { PackageRequest, RequestStatus } from "@/lib/swamp"
 
 import { LifecycleStrip } from "./lifecycle-strip"
@@ -157,109 +154,76 @@ export function ApprovalQueueTab({
               {group.items.length} package{group.items.length === 1 ? "" : "s"}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8">
-                    <span className="sr-only">Expand</span>
-                  </TableHead>
-                  <TableHead>Package</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>License</TableHead>
-                  <TableHead>Submitter</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Lifecycle</TableHead>
-                  {group.status === "requested" && (
-                    <TableHead className="text-right">Actions</TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {group.items.map((item) => {
-                  const isOpen = Boolean(expanded[item.pkgname])
-                  const panelId = `request-details-${item.pkgname}`
-                  const colSpan = group.status === "requested" ? 8 : 7
-                  return (
-                    <Fragment key={item.pkgname}>
-                      <TableRow>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="size-7"
-                            aria-expanded={isOpen}
-                            aria-controls={panelId}
-                            aria-label={
-                              isOpen
-                                ? `Collapse details for ${item.pkgname}`
-                                : `Expand details for ${item.pkgname}`
-                            }
-                            onClick={() => toggleExpanded(item.pkgname)}
-                          >
-                            <ChevronRightIcon
-                              className={`size-4 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                            />
-                          </Button>
-                        </TableCell>
-                        <TableCell className="font-medium">{item.pkgname}</TableCell>
-                        <TableCell className="max-w-xs truncate">
-                          {item.description}
-                        </TableCell>
-                        <TableCell>{item.license}</TableCell>
-                        <TableCell>{item.submittedBy}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={item.status} />
-                        </TableCell>
-                        <TableCell>
-                          <LifecycleStrip pkgname={item.pkgname} status={item.status} />
-                        </TableCell>
-                        {group.status === "requested" && (
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={pending === item.pkgname}
-                                onClick={() => rule(item.pkgname, "approve")}
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={pending === item.pkgname}
-                                onClick={() => rule(item.pkgname, "reject")}
-                              >
-                                Reject
-                              </Button>
-                            </div>
-                          </TableCell>
+          <CardContent className="flex flex-col gap-3">
+            {group.items.map((item) => {
+              const isOpen = Boolean(expanded[item.pkgname])
+              return (
+                <Collapsible
+                  key={item.pkgname}
+                  open={isOpen}
+                  onOpenChange={(open) => toggleExpanded(item.pkgname, open)}
+                  className="rounded-lg border"
+                >
+                  <div className="flex flex-col gap-3 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CollapsibleTrigger
+                        className={cn(
+                          buttonVariants({ variant: "ghost", size: "icon" }),
+                          "size-7 shrink-0 transition-transform data-[panel-open]:rotate-90"
                         )}
-                      </TableRow>
-                      <TableRow className="border-b-0 hover:bg-transparent">
-                        <TableCell
-                          colSpan={colSpan}
-                          className="whitespace-normal p-0"
-                        >
-                          <Collapsible
-                            open={isOpen}
-                            onOpenChange={(open) =>
-                              toggleExpanded(item.pkgname, open)
-                            }
+                        aria-label={
+                          isOpen
+                            ? `Collapse details for ${item.pkgname}`
+                            : `Expand details for ${item.pkgname}`
+                        }
+                      >
+                        <ChevronRightIcon className="size-4 shrink-0" />
+                      </CollapsibleTrigger>
+                      <span className="min-w-0 truncate font-medium">
+                        {item.pkgname}
+                      </span>
+                      <StatusBadge status={item.status} />
+                      {group.status === "requested" && (
+                        <div className="flex gap-2 sm:ml-auto">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={pending === item.pkgname}
+                            onClick={() => rule(item.pkgname, "approve")}
                           >
-                            <CollapsibleContent id={panelId} className="bg-muted/30">
-                              <RequestDetailsPanel request={item} />
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </TableCell>
-                      </TableRow>
-                    </Fragment>
-                  )
-                })}
-              </TableBody>
-            </Table>
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={pending === item.pkgname}
+                            onClick={() => rule(item.pkgname, "reject")}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-x-4 gap-y-1 pl-9 text-sm text-muted-foreground md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                      <span className="truncate" title={item.description}>
+                        {item.description}
+                      </span>
+                      <span className="truncate">{item.license}</span>
+                      <span className="truncate">{item.submittedBy}</span>
+                    </div>
+                    <div className="pl-9">
+                      <LifecycleStrip
+                        pkgname={item.pkgname}
+                        status={item.status}
+                      />
+                    </div>
+                  </div>
+                  <CollapsibleContent className="border-t bg-muted/30">
+                    <RequestDetailsPanel request={item} />
+                  </CollapsibleContent>
+                </Collapsible>
+              )
+            })}
           </CardContent>
         </Card>
       ))}

@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ansiLogToHtml } from "@/lib/ansi"
 import { cn } from "@/lib/utils"
 import type { EvidenceStage, StageEvidence } from "@/lib/swamp"
 
@@ -224,9 +225,13 @@ export function PhaseEvidenceRow({
                 Raw log
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <pre className="mt-2 max-h-72 overflow-auto rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
-                  {data.log}
-                </pre>
+                <pre
+                  className="mt-2 max-h-72 overflow-auto rounded-md border bg-well p-3 text-xs whitespace-pre-wrap"
+                  // data.log is HTML-escaped before anser turns ANSI codes into
+                  // spans (see lib/ansi.ts), so this can't inject raw log content
+                  // as markup.
+                  dangerouslySetInnerHTML={{ __html: ansiLogToHtml(data.log) }}
+                />
               </CollapsibleContent>
             </Collapsible>
           )}

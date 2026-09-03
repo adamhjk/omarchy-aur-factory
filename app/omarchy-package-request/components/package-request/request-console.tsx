@@ -78,7 +78,7 @@ export function RequestConsole() {
 
   return (
     <Tabs defaultValue="submit" className="w-full max-w-4xl">
-      <TabsList>
+      <TabsList className="mx-auto flex w-fit">
         <TabsTrigger value="submit">Submit</TabsTrigger>
         <TabsTrigger value="approval">Approval queue</TabsTrigger>
         <TabsTrigger value="promotion">Promotion</TabsTrigger>

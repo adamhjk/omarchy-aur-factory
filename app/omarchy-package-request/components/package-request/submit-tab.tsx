@@ -36,7 +36,9 @@ export function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
   const [success, setSuccess] = useState<string | null>(null)
 
   function updateField(field: keyof typeof EMPTY_FORM) {
-    return (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    return (
+      event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    ) => {
       setForm((prev) => ({ ...prev, [field]: event.target.value }))
     }
   }
@@ -57,7 +59,11 @@ export function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
       if (!res.ok) {
         const message = body?.error ?? `Request failed (${res.status})`
         setError(message)
-        toast.add({ title: "Submission failed", description: message, type: "error" })
+        toast.add({
+          title: "Submission failed",
+          description: message,
+          type: "error",
+        })
         return
       }
       setSuccess(`Request for '${form.pkgname}' submitted.`)
@@ -71,14 +77,18 @@ export function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed"
       setError(message)
-      toast.add({ title: "Submission failed", description: message, type: "error" })
+      toast.add({
+        title: "Submission failed",
+        description: message,
+        type: "error",
+      })
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Card className="max-w-xl">
+    <Card className="mx-auto w-full max-w-2xl">
       <CardHeader>
         <CardTitle>Submit a package request</CardTitle>
         <CardDescription>
@@ -129,7 +139,9 @@ export function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
                 placeholder="MIT"
                 required
               />
-              <FieldDescription>SPDX identifier, e.g. MIT, GPL-3.0.</FieldDescription>
+              <FieldDescription>
+                SPDX identifier, e.g. MIT, GPL-3.0.
+              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="submitter">Your name</FieldLabel>
