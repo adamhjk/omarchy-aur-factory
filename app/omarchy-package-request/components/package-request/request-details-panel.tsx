@@ -39,17 +39,21 @@ export function RequestDetailsPanel({ request }: { request: PackageRequest }) {
         <div className="sm:col-span-2 lg:col-span-3">
           <DetailField label="Description">{request.description}</DetailField>
         </div>
-        <DetailField label="Source URL">
-          <a
-            href={request.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-primary underline underline-offset-4 hover:no-underline"
-          >
-            {request.url}
-            <ExternalLinkIcon className="size-3.5 shrink-0" />
-          </a>
-        </DetailField>
+        {/* Source URLs are long — full row of their own; the short fields
+            (license, submitter) share the next line. */}
+        <div className="col-span-full">
+          <DetailField label="Source URL">
+            <a
+              href={request.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 break-all text-primary underline underline-offset-4 hover:no-underline"
+            >
+              {request.url}
+              <ExternalLinkIcon className="size-3.5 shrink-0" />
+            </a>
+          </DetailField>
+        </div>
         <DetailField label="License">{request.license}</DetailField>
         <DetailField label="Submitter">{request.submittedBy}</DetailField>
         {request.version && (
