@@ -130,29 +130,32 @@ export function SubmitTab({ onSubmitted }: { onSubmitted: () => void }) {
                 required
               />
             </Field>
-            <Field>
-              <FieldLabel htmlFor="license">License</FieldLabel>
-              <Input
-                id="license"
-                value={form.license}
-                onChange={updateField("license")}
-                placeholder="MIT"
-                required
-              />
-              <FieldDescription>
-                SPDX identifier, e.g. MIT, GPL-3.0.
-              </FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="submitter">Your name</FieldLabel>
-              <Input
-                id="submitter"
-                value={form.submitter}
-                onChange={updateField("submitter")}
-                placeholder="jdoe"
-                required
-              />
-            </Field>
+            {/* Source URLs need the full row above; these two are short — share one. */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="license">License</FieldLabel>
+                <Input
+                  id="license"
+                  value={form.license}
+                  onChange={updateField("license")}
+                  placeholder="MIT"
+                  required
+                />
+                <FieldDescription>
+                  SPDX identifier, e.g. MIT, GPL-3.0.
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="submitter">Your name</FieldLabel>
+                <Input
+                  id="submitter"
+                  value={form.submitter}
+                  onChange={updateField("submitter")}
+                  placeholder="jdoe"
+                  required
+                />
+              </Field>
+            </div>
             {error && <FieldError>{error}</FieldError>}
             {success && (
               <FieldDescription className="text-sm text-foreground">
