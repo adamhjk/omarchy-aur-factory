@@ -11,3 +11,4 @@ node_modules/
 .next/
 # skill eval workspace run outputs (definitions/graders are tracked)
 .claude/skills/arch-packaging-workspace/iteration-*/
+test-packages/

@@ -73,6 +73,29 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Minimal seed PKGBUILD, generated at converge time so the repo ships no
+ * packages and a fresh clone starts cold. It exists purely to exercise the
+ * real pipeline stages (installdeps bootstrap, and the full build in deep
+ * mode) against a trivially correct package.
+ */
+const SEED_PKGBUILD = `pkgname=factory-seed
+pkgver=1
+pkgrel=1
+pkgdesc="Omarchy factory convergence seed"
+arch=(any)
+url="https://github.com/adamhjk/omarchy-aur-factory"
+license=(0BSD)
+depends=(glibc ncurses)
+source=()
+sha256sums=()
+
+# check() intentionally omitted: nothing to test in the seed.
+package() {
+  install -Dm644 /dev/null "$pkgdir/usr/share/factory-seed/seed"
+}
+`;
+
 /** Host commands the factory needs, with remediation for missing ones. */
 const HOST_COMMANDS: Array<[string, string]> = [
   ["makepkg", "sudo pacman -S --needed base-devel"],
@@ -156,11 +179,13 @@ export const model = {
           ovl.ok ? "overlayfs mounts inside a user namespace" : "kernel too old (<5.11) or overlay disabled",
         );
 
-        // 3. Repo layout (skill references, seed package, app).
+        // 3. Repo layout (skill references, app) + generated seed package.
         const refs = `${root}/.claude/skills/arch-packaging/references/pkgbuild.md`;
         add("skill-references", (await exists(refs)) ? "ok" : "missing", refs);
-        const seedDir = `${root}/test-packages/sl`;
-        add("seed-package", (await exists(`${seedDir}/PKGBUILD`)) ? "ok" : "missing", `${seedDir}/PKGBUILD`);
+        const seedDir = "/tmp/omarchy-factory-scratch/factory-seed";
+        await Deno.mkdir(seedDir, { recursive: true });
+        await Deno.writeTextFile(`${seedDir}/PKGBUILD`, SEED_PKGBUILD);
+        add("seed-package", "ok", `generated at ${seedDir}`);
 
         // 4. Working directories (converge).
         for (const d of [`${root}/test-packages`, "/tmp/omarchy-factory-scratch"]) {
@@ -188,7 +213,7 @@ export const model = {
             "--input",
             `dir=${seedDir}`,
             "--input",
-            "name=sl-5.02-1",
+            "name=factory-seed-1-1",
             "--json",
           ]);
           logs.push(`$ installdeps seed (exit ${seed.code})\n${seed.output.slice(-2000)}`);
@@ -237,9 +262,9 @@ export const model = {
             "--input",
             `dir=${seedDir}`,
             "--input",
-            "name=sl",
+            "name=factory-seed",
             "--input",
-            "version=5.02-1",
+            "version=1-1",
             "--json",
           ]);
           logs.push(`$ build-package seed (exit ${wf.code})\n${wf.output.slice(-2000)}`);
