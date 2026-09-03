@@ -63,7 +63,6 @@ All you need is [swamp](https://github.com/swamp-club/swamp) (and `git`):
 
 ```
 git clone <this repo> && cd omarchy-aur-factory/swamp
-swamp auth login
 swamp model @omarchy/factory-setup method run converge setup
 ```
 
@@ -130,13 +129,10 @@ swamp workflow run update-app \
 
 Be specific: name endpoints, data shapes, and the tests that must pass.
 
-# Costs & cautions
+# Cautions
 
-- The judgment stages call Claude and cost real money: roughly $0.60 to author a
-  package, $1-4 per app work item, cents per review round. Deterministic stages
-  are free.
-- Arch Linux only (makepkg/pacman are load-bearing). You need a swamp-club
-  account (`swamp auth login`) and an authenticated `claude` CLI.
+- Arch Linux only (makepkg/pacman are load-bearing). You need an authenticated
+  `claude` CLI.
 - PKGBUILDs are model-authored: read the dossier before you promote — that is
   what the maintainer/user promotion gates are for.
 - The web app has no authentication and its API executes swamp commands: bind it
