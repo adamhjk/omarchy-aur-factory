@@ -11,6 +11,8 @@ This is a research spike of an Omarchy AUR package factory. The goal is:
 
 It's working end to end, making isolated package builds from minimal, controlled user input.
 
+You [can see it in action on YouTube](https://www.youtube.com/watch?v=6bK9F31DZEU).
+
 # Getting started
 
 First, install [swamp](https://swamp-club.com)
@@ -18,6 +20,10 @@ First, install [swamp](https://swamp-club.com)
 ```
 curl -fsSL https://swamp-club.com/install.sh | sh
 ```
+
+
+Make sure you have a working install of Claude Code. We can easily make this work with any 
+harness and model, but today it's just Claude for the prototype.
 
 Then clone this repo:
 
@@ -138,8 +144,7 @@ Be specific: name endpoints, data shapes, and the tests that must pass.
 
 # Cautions
 
-- Arch Linux only (makepkg/pacman are load-bearing). You need an authenticated
-  `claude` CLI.
+- Arch Linux only. You need an authenticated `claude` CLI.
 - PKGBUILDs are model-authored: read the dossier before you promote — that is
   what the maintainer/user promotion gates are for.
 - The web app has no authentication and its API executes swamp commands: bind it
